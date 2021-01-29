@@ -1,0 +1,1573 @@
+import numpy as np
+import os
+import glob
+from astropy.io import fits
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+from scipy import stats
+import copy
+
+import sys
+sys.path.append("../")
+from FIESTA_functions import *
+# import FIESTA_functions from the directory above 
+# https://gist.github.com/MRobertEvers/55a989b4883ea8d7715d2e156627f034
+
+
+# Read the CCFs
+
+import pandas as pd
+import shutil
+
+df = pd.read_csv('./harpn_sun_release_timeseries_2015-2018.csv')
+
+if 0: 
+	file_ccf = sorted(glob.glob('./ccfs/*.fits'))
+# min(df['obs_quality']) = 0.99 
+# => all the files in the csv table is eligible for "no clouds"
+# min(df['drs_quality']) = True
+# => all files have good quality of the data reduction software
+
+# simply check if files are matching 
+	count = 0
+	for n in range(len(df)):
+		print(n)
+		for j in n+np.arange(80)-31:
+			if df['filename'][n][:-5] == file_ccf[j][7:38]:
+				shutil.move(file_ccf[j], "./valid_ccfs")
+				count += 1
+
+	for n in np.arange(34534, len(df)):
+		print(n)
+		for j in range(len(file_ccf)):
+			if df['filename'][n][:-5] == file_ccf[j][7:38]:
+				shutil.move(file_ccf[j], "./valid_ccfs")
+				count += 1
+
+# All the matching files are moved to the valid_ccfs folder. 
+valid_ccf = sorted(glob.glob('../../AstroData/FIESTA-HARPS-N/valid_ccfs/*.fits'))
+
+if 0:
+	for i in range(len(df)):
+		if (valid_ccf[i][13:44] == df['filename'][i][:-5]) == False: 
+			print(i)
+
+N_file 	= len(valid_ccf)
+V_grid 	= (np.arange(49) - 24) * 0.82
+idx 	= (-10<V_grid) & (V_grid<10)
+# V_grid 	= V_grid[idx]
+CCF 	= np.zeros((len(V_grid), N_file))
+eCCF = np.zeros((len(V_grid), N_file))
+
+# Normalised CCF for the first 100 files 
+if 0: 
+	for n in range(100):
+	 	hdulist     = fits.open(valid_ccf[n])
+	 	data         = hdulist[1].data
+	 	plt.plot(V_grid[idx], data[0,idx] / np.mean(data[0,~idx]))
+	plt.show()	
+
+if 0: 
+	rv 		= np.array(df['rv'])
+	rv_err 	= np.array(df['rv_err'])
+	bjd 	= np.array(df['date_bjd'])
+	rv_raw 	= np.array(df['rv_raw'])
+	rv_berv_bary_to_helio = np.array(df['berv_bary_to_helio'])
+
+
+
+if 0: 
+	#--------------------------------------------------------------------
+	# Part 1: individual analysis 
+	#--------------------------------------------------------------------
+	# Go to part 2 for daily analysis
+
+	# FWHM = 2.355 sigma for a Gaussian function?
+
+	fwhm_raw 	= np.array(df['fwhm_raw'])
+	sigma 		= np.zeros(N_file)
+	V_centre 	= np.zeros(N_file)
+	CCF 		= np.zeros((len(V_grid), N_file))
+
+	# Read and normalise the CCFs
+	for n in range(len(valid_ccf)):
+	# for n in range(100):	
+		print(n)
+		hdulist     = fits.open(valid_ccf[n])
+		data        = hdulist[1].data	
+		CCF[:,n] 	= 1 - data[69,:] / np.mean(data[69,~idx])
+		data2       = hdulist[2].data
+		eCCF[:,n] 	= data2[69,:] / np.mean(data[69,~idx])
+		popt, pcov 	= curve_fit(gaussian, V_grid, CCF[:,n], p0=[0.5, (max(V_grid)+min(V_grid))/2, 3, 0])
+		sigma[n] 	= popt[2]
+		V_centre[n] = popt[1]
+
+
+	# plot the sigma of all orders // orders range from 0 to 68
+	sigma_by_order = np.zeros((69, len(valid_ccf)))
+	for n in range(len(valid_ccf)):
+	# for n in range(100):	
+		print(n)
+		hdulist     = fits.open(valid_ccf[n])
+		data        = hdulist[1].data	
+		for order in range(69):
+			if not data[order,:].any():
+				sigma_by_order[order, n] = 0
+			else:		
+				ccf 	= 1 - data[order,:] / np.mean(data[order,~idx])
+				popt, pcov 	= curve_fit(gaussian, V_grid, ccf, p0=[0.5, (max(V_grid)+min(V_grid))/2, 1, 0])
+				sigma_by_order[order, n] = popt[2]
+
+
+	for order in range(69):
+		fig, axes = plt.subplots(figsize=(12, 4))
+		plt.plot(bjd, sigma_by_order[order, :], '.', alpha=0.1)
+		plt.xlabel('date_bjd')
+		plt.ylabel('sigma')
+		plt.title('order' + str(order))
+		plt.savefig('sigma_by_order' + str(order) + '.png')
+		plt.close()
+
+
+
+	# =============================================================================
+	# for order in range(69):
+	# 	fig, axes = plt.subplots(figsize=(12, 4))
+	# 	plt.plot(V_grid, data[order, :], '-')
+	# 	plt.xlabel('V_grid')
+	# 	plt.ylabel('last_CCF_by_order')
+	# 	plt.title('order' + str(order))
+	# 	plt.savefig('last_CCF_by_order' + str(order) + '.png')
+	# 	plt.close()	
+	# =============================================================================
+
+	# max(bjd) - min(bjd) = 1093.819484889973
+	sigma_by_order_itp = np.zeros((69, 10000))
+	bjd_itp = np.linspace(min(bjd), max(bjd), num=10000)
+	for order in range(69):
+		f = interp1d(bjd, sigma_by_order[order, :])
+		sigma_by_order_itp[order, :] = f(bjd_itp)
+
+
+
+	X, Y = np.mgrid[0:9999:complex(0, 10000), 0:68:complex(0, 69)]
+	Z = np.transpose(sigma_by_order_itp)
+	for i in range(69):
+		Z[:, i] = Z[:, i] - np.mean(Z[:, i])
+
+	fig, ax0, = plt.subplots()
+
+	# c = ax0.pcolor(X, Y, Z,
+	#                norm=LogNorm(vmin=Z.min(), vmax=Z.max()), cmap='PuBu_r')
+	# fig.colorbar(c, ax=ax0)
+
+	# viridis = plt.cm.get_cmap('viridis', 12)
+	c = ax0.pcolor(X, Y, Z, cmap='PuBu_r', alpha=.9)
+	fig.colorbar(c, ax=ax0)
+	plt.savefig('sigma_by_order_2D.png')	
+	plt.close()
+
+
+	clean_orders = [2, 4, 6, 8, 9, 11, 18, 19, 20, 23, 24, 27, 28, 29, 30, 34,37, 42, 43, 44, 45, 46,47,48,49,50,51,52,53, 55,56,57, 59,61,62, 64,65,66]
+
+	CCF_clean 		= np.zeros((len(V_grid), N_file))
+	sigma_clean 	= np.zeros(N_file)
+	# Read and normalise the CCFs
+	for n in range(len(valid_ccf)):
+	# for n in range(100):	
+		print(n)
+		hdulist     = fits.open(valid_ccf[n])
+		data        = hdulist[1].data
+		ccf_temp 	= sum(data[clean_orders,:])
+		CCF_clean[:,n] 	= 1 - ccf_temp / np.mean(ccf_temp[~idx])
+		# eCCF[:,n] = (data2[n+1,idx]**0.5 / max(data[n+1,idx])) 
+		popt, pcov 	= curve_fit(gaussian, V_grid, CCF_clean[:,n], p0=[0.5, (max(V_grid)+min(V_grid))/2, 1, 0])
+		sigma_clean[n] 	= popt[2]
+
+
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, sigma, '.', alpha=0.2, label='all_orders')
+	plt.plot(bjd, sigma_clean, '.', alpha=0.1, label='clean_orders')
+	plt.xlabel('date_bjd')
+	plt.ylabel('sigma')
+	plt.legend()
+	plt.savefig('sigma_clean.png')
+	# plt.show()
+	plt.close()
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, sigma - np.mean(sigma), '.', alpha=0.1, label='all_orders')
+	plt.plot(bjd, sigma_clean - np.mean(sigma_clean), '.', alpha=0.05, label='clean_orders')
+	plt.xlabel('date_bjd')
+	plt.ylabel('sigma')
+	plt.legend()
+	plt.savefig('sigma_clean2.png')
+	# plt.show()
+	plt.close()
+
+	def moving_average(x, w):
+	    return np.convolve(x, np.ones(w), 'valid') / w
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	diff = sigma - np.mean(sigma) - (sigma_clean - np.mean(sigma_clean))
+	plt.plot(bjd, diff, '.', alpha=0.1)
+	plt.plot(bjd[45:34506], moving_average(diff, 90), '-', alpha=1)
+	plt.xlabel('date_bjd')
+	plt.ylabel('sigma_diff')
+	plt.savefig('sigma_clean3.png')
+	# plt.show()
+	plt.close()
+
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, df['rv_raw'], '.', alpha=0.2)
+	plt.xlabel('date_bjd')
+	plt.ylabel('rv_raw')
+	plt.savefig('rv_raw.png')
+	# plt.show()
+	plt.close()
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, df['rv'], '.', alpha=0.2)
+	plt.xlabel('date_bjd')
+	plt.ylabel('rv (heliocentric)')
+	plt.savefig('rv.png')
+	# plt.show()
+	plt.close()
+
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	# plt.plot(bjd, df['rv'], '.', alpha=0.2, label="raw, i.e. df.['rv']")
+	# plt.plot(bjd_daily[rv_daily!=0], rv_daily[rv_daily!=0], 'x', alpha=0.8, label='daily averages')
+	# plt.plot(bjd, df['rv_raw'] - df['berv_bary_to_helio'] - df['rv_diff_extinction'] -df['rv'], '.', alpha=0.1, label="__")
+	plt.plot(bjd, df['rv_diff_extinction'], '-', alpha=0.1, label="__")
+	plt.legend()
+	plt.xlabel('date_bjd')
+	plt.ylabel('rv (heliocentric) [m/s]')
+	plt.savefig('rv2.png')
+	# plt.show()
+	# plt.close()
+
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, fwhm_raw, '.', alpha=0.2)
+	plt.xlabel('bjd')
+	plt.ylabel('fwhm_raw')
+	plt.savefig('fwhm_raw.png')
+	# plt.show()
+	plt.close()
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, df['fwhm'], '.', alpha=0.2)
+	plt.xlabel('bjd')
+	plt.ylabel('fwhm')
+	plt.savefig('fwhm.png')
+	# plt.show()
+	plt.close()
+
+	# compare the fwhm and sigma
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, sigma, '.', alpha=0.2)
+	plt.xlabel('bjd')
+	plt.ylabel('sigma')
+	plt.savefig('sigma_correct.png')
+	# plt.show()
+	plt.close()
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, fwhm_raw/sigma/1000, '.', alpha=0.2)
+	plt.xlabel('bjd')
+	plt.ylabel('ratio')
+	plt.savefig('ratio.png')
+	# plt.show()
+	plt.close()
+
+
+#----------------------------------
+# Part 2: Daily average analysis 
+#----------------------------------
+
+# first, generate a df file only with abs(df['rv_diff_extinction']) < 0.1
+array_index = np.arange(34550)
+df 			= df.drop(array_index[abs(df['rv_diff_extinction']) >= 0.1])
+
+rv 			= np.array(df['rv'])
+rv_err 		= np.array(df['rv_err'])
+bjd 		= np.array(df['date_bjd'])
+fwhm_raw 	= np.array(df['fwhm_raw'])
+
+# if everything goes alright
+# then correct the measured CCFs
+
+bjd_daily 			= np.zeros(632)
+CCF_daily 			= np.zeros((len(V_grid), 632))
+eCCF_daily			= np.zeros((len(V_grid), 632))
+rv_daily			= np.zeros(632)
+erv_daily			= np.zeros(632)
+widening_var 		= (df['fwhm']**2 - fwhm_raw**2) / 1e6
+widening_var_daily 	= np.zeros(632)
+
+date0 		= df.iloc[0][0][8:18] # first elegible file 
+k 			= 0
+i0			= 0 
+CCF_daily_sum = 0
+eCCF_daily_sum = 0
+
+for i in range(len(df)):
+	hdulist     = fits.open('../../AstroData/FIESTA-HARPS-N/valid_ccfs/' + df.iloc[i][0][:-5] + '_CCF_A.fits')
+	data        = hdulist[1].data		
+	data2       = hdulist[2].data	
+	date 		= df.iloc[i][0][8:18]
+	if date == date0:
+		CCF_daily_sum 	+= data[69,:]
+		eCCF_daily_sum 	+= data2[69,:]**2
+	else:
+		# eCCF_daily[:, k]= eCCF_daily_sum[idx]**0.5 / np.mean(CCF_daily_sum[~idx])
+		# CCF_daily[:, k] = 1 - CCF_daily_sum[idx] / np.mean(CCF_daily_sum[~idx])
+		eCCF_daily[:, k]= eCCF_daily_sum**0.5 / np.mean(CCF_daily_sum[~idx])
+		CCF_daily[:, k] = 1 - CCF_daily_sum / np.mean(CCF_daily_sum[~idx])
+		rv_daily[k] 	= np.average(rv[i0:i], weights=1/rv_err[i0:i]**2)
+		erv_daily[k] 	= (1/sum(1/rv_err[i0:i]**2))**0.5
+		bjd_daily[k] 	= np.average(bjd[i0:i], weights=1/rv_err[i0:i]**2)
+		widening_var_daily[k] = np.average(widening_var[i0:i], weights=1/rv_err[i0:i]**2)
+		print(k, i0, i, date)
+		k += 1
+		i0 = i
+		date0 = date
+		CCF_daily_sum 	= data[69,:]
+		eCCF_daily_sum 	= data2[69,:]**2
+		
+eCCF_daily[:, k] 		= eCCF_daily_sum**0.5 / np.mean(CCF_daily_sum[~idx])
+CCF_daily[:, k] 		= 1 - CCF_daily_sum / np.mean(CCF_daily_sum[~idx])
+# eCCF_daily[:, k] 		= eCCF_daily_sum[idx]**0.5 / np.mean(CCF_daily_sum[~idx])
+# CCF_daily[:, k] 		= 1 - CCF_daily_sum[idx] / np.mean(CCF_daily_sum[~idx])
+rv_daily[k] 			= np.average(rv[i0:i+1], weights=1/rv_err[i0:i+1]**2)
+erv_daily[k] 			= (1/sum(1/rv_err[i0:i+1]**2))**0.5
+bjd_daily[k] 			= np.average(bjd[i0:i+1], weights=1/rv_err[i0:i+1]**2)
+widening_var_daily[k] 	= np.average(widening_var[i0:i+1], weights=1/rv_err[i0:i+1]**2)
+
+idx_0 		= (rv_daily==0)
+rv_daily 	= rv_daily[~idx_0]
+erv_daily 	= erv_daily[~idx_0]
+bjd_daily 	= bjd_daily[~idx_0]
+CCF_daily 	= CCF_daily[:, ~idx_0]
+eCCF_daily 	= eCCF_daily[:, ~idx_0]
+
+# Because files with high diff_extinction (>0.1) are excluded, 
+# the number of daily averages becomes 567!
+# In [64]: rv_daily.shape
+# Out[64]: (567,)
+
+#----------------------------------
+# then go to FIESTA
+#----------------------------------
+
+# The following are tests regarding part 2
+if 0: 
+	plt.plot(V_grid, CCF_daily)
+	plt.xlabel('V_grid')
+	plt.ylabel('normalised_flux')
+	plt.savefig('normalised_ccf.png')
+	plt.show()
+
+	for i in range(len(bjd_daily)):
+		plt.plot(V_grid, CCF_daily[:,i]-CCF_daily[:,0], alpha=0.1)
+	plt.xlabel('V_grid')
+	plt.ylabel('delta_CCF')
+	plt.savefig('delta_ccf.png')
+	plt.show()
+
+	sigma_daily 		= np.zeros(632)
+	V_centre_daily 	= np.zeros(632)
+
+	for n in range(632):
+		# print(n)
+		popt, pcov 	= curve_fit(gaussian, V_grid, CCF_daily[:,n], p0=[0.5, (max(V_grid)+min(V_grid))/2, 1, 0])
+		sigma_daily[n] 	= popt[2]
+		V_centre_daily[n] = popt[1]
+
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd_daily, sigma_daily, '.', alpha=0.5)
+	plt.plot(bjd_daily, sigma_daily, '-', alpha=0.2)
+	plt.xlabel('bjd')
+	plt.ylabel('sigma_daily')
+	plt.savefig('sigma_daily.png')
+	plt.show()
+	plt.close()
+
+	#overplot
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, fwhm_raw/2.355/1000, '.', alpha=0.2, label='fwhm_raw_scaled')
+	plt.plot(bjd_daily, sigma_daily, '.', alpha=0.5, label='sigma_daily')
+	plt.plot(bjd_daily, sigma_daily, '-')
+	plt.legend()
+	plt.xlabel('bjd')
+	plt.ylabel('sigma_daily')
+	plt.savefig('sigma_daily_vs_fwhm_raw.png')
+	# plt.show()
+	plt.close()
+
+
+	# How much the line profile should be widened? 
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, (df['fwhm']**2 - fwhm_raw**2)**0.5 / 1000, '.', alpha=0.5)
+	plt.xlabel('bjd')
+	plt.ylabel('widened [km/s]')
+	plt.savefig('widened.png')
+	plt.close()
+
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd, widening_var, '.', alpha=0.5, label='widening_var')
+	plt.plot(bjd_daily, widening_var_daily, '.', alpha=0.5, label='widening_var_daily')
+	plt.legend()
+	plt.xlabel('bjd')
+	plt.ylabel('widening_fwhm_var [km/s]^2')
+	plt.savefig('widened_comparison.png')
+	plt.close()
+
+
+	widening_sigma2_daily = widening_var_daily / 2.355**2
+
+
+	CCF_daily_centre = np.zeros(632)
+	c_correction = np.zeros(632)
+	for n in range(632):
+		popt, pcov 	= curve_fit(gaussian, V_grid, CCF_daily[:,n], p0=[0.5, (max(V_grid)+min(V_grid))/2, 1, 0])
+		CCF_daily_centre[n] = popt[1]
+		c_correction[n] = popt[3]
+
+
+	if 0: testing the broading of a profile 
+		# def gaussian(x, amp, mu, sig, c):
+		#     return amp * np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.))) + c
+
+		broadening_profile0 = gaussian(V_grid, 1, 0, widening_sigma2_daily[0]**0.5, 0)
+
+		plt.plot(V_grid, CCF_daily[:,0], label='CCF_daily0')
+		plt.plot(V_grid, broadening_profile, label='win')
+		plt.plot(V_grid, np.convolve(CCF_daily[:,0], broadening_profile0, 'same'), label='broadened_profile')
+		plt.legend()
+		plt.xlabel('V_grid')
+		plt.savefig('CCF_broadening.png')
+		plt.close()
+
+
+		from scipy import signal
+
+		V_grid_inter 	= (np.arange(4801) - 2400) * (0.82/100)
+		f = interp1d(V_grid, CCF_daily[:,0], kind='cubic')
+		CCF_inter = f(V_grid_inter)
+		broadening_profile = gaussian(V_grid_inter, 1, 0, widening_sigma2_daily[0]**0.5, 0)
+
+		plt.plot(V_grid_inter, CCF_inter, label='CCF_daily0')
+		plt.plot(V_grid_inter, broadening_profile, label='win')
+		broadened_profile = signal.convolve(CCF_inter, broadening_profile,mode='same') / sum(broadening_profile)
+		plt.plot(V_grid_inter, broadened_profile, label='broadened_profile')
+		plt.legend()
+		plt.xlabel('V_grid')
+		plt.savefig('CCF_broadening_inter.png')
+		plt.close()
+
+
+		if 0:
+			V_grid_inter 	= (np.arange(4801) - 2400) * (0.82/100)
+			f = interp1d(V_grid, CCF_daily[:,0], kind='cubic')
+			CCF_inter = f(V_grid_inter)
+			broadening_profile = gaussian(V_grid_inter, 1, 0, widening_sigma2_daily[0]**0.5, 0)
+
+			plt.plot(V_grid_inter, CCF_inter, label='CCF_daily0')
+			plt.plot(V_grid_inter, broadening_profile, label='broadening_profile')
+			plt.plot(V_grid_inter, np.convolve(CCF_inter, broadening_profile, 'same') / sum(broadening_profile), label='broadening_profile')
+			plt.legend()
+			plt.xlabel('V_grid')
+			plt.savefig('CCF_broadening_inter.png')
+			plt.close()
+
+
+
+	CCF_daily_corrected = np.zeros(CCF_daily.shape)
+	from scipy import signal
+	V_grid_inter = (np.arange(4801) - 2400) * (0.82/100)
+
+	for n in range(632):
+		f 					= interp1d(V_grid, CCF_daily[:,n], kind='cubic')
+		CCF_inter 			= f(V_grid_inter)
+		win 				= gaussian(V_grid_inter, 1, 0, widening_sigma2_daily[n]**0.5, 0)
+		broadened_profile 	= signal.convolve(CCF_inter, win, mode='same') / sum(win)
+		CCF_daily_corrected[:, n] = broadened_profile[np.arange(49)*100]
+
+
+	# check 
+	sigma_daily_corrected = np.zeros(sigma_daily.shape)
+	V_centre_daily_corrected = np.zeros(sigma_daily.shape)
+	for n in range(632):
+		popt, pcov 	= curve_fit(gaussian, V_grid, CCF_daily_corrected[:,n], p0=[0.5, (max(V_grid)+min(V_grid))/2, 1, 0])
+		sigma_daily_corrected[n] 	= popt[2]
+		V_centre_daily_corrected[n] = popt[1]
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	plt.plot(bjd_daily, sigma_daily_corrected / sigma_daily, '.', alpha=0.5, label='ratio_sigma')
+	plt.plot(bjd, df['fwhm'] / fwhm_raw, '.', alpha=0.5, label='ratio_fwhm')
+	plt.legend()
+	plt.xlabel('bjd_daily')
+	plt.savefig('ratio_check.png')
+	plt.close()
+
+
+
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	# plt.plot(bjd, rv_raw, '.', alpha=0.2, label='rv raw')
+	plt.plot(bjd_daily, CCF_daily_centre*1000, '.', alpha=0.2, label='CCF_daily_rv')
+	plt.plot(bjd_daily, V_centre_daily_corrected*1000, '.', alpha=0.2, label='CCF_daily_corrected')
+	plt.legend()
+	plt.xlabel('date_bjd')
+	plt.ylabel('rv [m/s]')
+	plt.savefig('rv_comparison.png')
+	plt.show()
+	plt.close()
+
+	fig, axes = plt.subplots(figsize=(12, 4))
+	# plt.plot(bjd, rv_raw, '.', alpha=0.2, label='rv raw')
+	plt.plot(bjd_daily, (CCF_daily_centre-V_centre_daily_corrected)*1000, '.', alpha=0.2, label='CCF_daily_rv_diff')
+	plt.plot(bjd_daily, widening_sigma2_daily**0.5, '.', alpha=0.2, label='widening_sigma2_daily**0.5')
+	plt.legend()
+	plt.xlabel('date_bjd')
+	plt.ylabel('rv_diff [m/s]')
+	plt.savefig('rv_comparison_difference.png')
+	plt.show()
+	plt.close()
+
+
+	# =============================================================================
+	# # analyse a subset of the time series 
+	# =============================================================================
+	# let's take segment #2
+	if 0:
+		idx2 = (bjd>57475) & (sigma < 3.47) & (bjd<57500)
+		idx1 = (bjd>57315) & (bjd<bjd[idx2][0]) 
+
+		fig, axes = plt.subplots(figsize=(12, 4))
+		# plt.plot(bjd[idx1], sigma[idx1], '.', alpha=0.5)
+		# plt.plot(bjd[idx2], sigma[idx2], '.', alpha=0.5)
+		plt.plot(bjd[idx1], sigma[idx1], '.', alpha=0.5)
+		plt.plot(bjd[idx1], reg.coef_ * bjd[idx1] + reg.intercept_, '-')
+		plt.xlabel('bjd')
+		plt.savefig('simga_s2.png')
+		plt.close()
+
+
+		from sklearn.linear_model import LinearRegression
+		reg = LinearRegression().fit(bjd[idx1].reshape(-1, 1), sigma[idx1])
+
+
+		sigma_new = sigma[idx1] - (reg.coef_ * bjd[idx1] + reg.intercept_) + np.max(sigma[idx1])
+		fig, axes = plt.subplots(figsize=(12, 4))
+		plt.plot(bjd[idx1], sigma_new, '.', alpha=0.5)
+		# plt.plot(bjd[idx1], reg.coef_ * bjd[idx1] + reg.intercept_, '-')
+		plt.xlabel('bjd')
+		plt.savefig('simga_s2_corrected.png')
+		plt.close()
+
+
+		# update the width of CCF 
+
+		widening_sigma = (sigma_new**2 - sigma[idx1]**2 - min(sigma_new**2 - sigma[idx1]**2) +0.01)**0.5
+		CCF_corrected = np.zeros(CCF[:,idx1].shape)
+
+		for n in range(len(bjd[idx1])):
+			f 					= interp1d(V_grid, CCF[:, idx1][:,n], kind='cubic')
+			CCF_inter 			= f(V_grid_inter)
+			win 				= gaussian(V_grid_inter, 1, 0, widening_sigma[n], 0)
+			broadened_profile 	= signal.convolve(CCF_inter, win, mode='same') / sum(win)
+			CCF_corrected[:, n] = broadened_profile[np.arange(49)*100]
+
+	idx_t =  (-15<V_grid) & (V_grid<15)
+	CCF_daily_corrected_trunked = CCF_daily_corrected[idx_t, :]
+
+
+
+#==============================================================================
+# Feed CCFs into FIESTA
+#==============================================================================
+# eCCF = np.zeros(CCF_daily_corrected.shape)
+# eCCF = np.zeros(CCF_daily.shape)
+shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
+# shift_spectrum, power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF)
+# Convertion from km/s to m/s
+shift_spectrum 		= shift_spectrum * 1000
+err_shift_spectrum 	= err_shift_spectrum * 1000
+# power_spectrum 		= power_spectrum * 1000
+# err_power_spectrum 	= err_power_spectrum * 1000
+RV_gauss 			= RV_gauss * 1000
+
+# RV_gauss 	= RV_gauss 		- np.mean(RV_gauss)
+RV_gauss = RV_gauss - RV_gauss[0]
+
+
+# compare the rvs
+fig, axes = plt.subplots(figsize=(12, 4))
+plt.plot(bjd, rv_raw-np.mean(rv_raw), '.', alpha=0.2, label='HARPS-N')
+plt.plot(bjd_daily, RV_gauss-np.mean(RV_gauss), '.', alpha=0.5, label='Gaussian fit of CCF_daily_corrected')
+plt.plot(bjd_daily, rv_daily*1000-np.mean(rv_daily*1000), '.', alpha=0.5, label='rv_daily')
+plt.xlabel('bjd')
+plt.ylabel('rv [m/s]')
+plt.legend()
+# plt.savefig('rv_raw_comparison.png')
+plt.show()
+
+for n in range(632):
+	plt.plot(V_grid, CCF_daily_corrected[:,n] - CCF_daily[:,n], alpha = 0.2)
+plt.savefig('CCF_diff.png')	
+plt.close()
+
+for n in range(632):
+	plt.plot(V_grid, CCF_daily[:,n] - np.mean(CCF_daily, axis=1), alpha = 0.2)
+# plt.savefig('CCF_diff.png')	
+# plt.close()
+for n in range(632):
+	plt.plot(V_grid, CCF_daily_corrected[:,n] - np.mean(CCF_daily_corrected, axis=1), alpha = 0.2)
+
+for n in range(632):
+	plt.plot(V_grid, CCF_daily_corrected[:,n] - CCF_daily[:,0], alpha = 0.2)
+
+# Haven't figured it out yet!!!
+
+
+#==============================================================================
+# Plots 
+#==============================================================================
+
+# FIESTA shifts time series #
+
+shift_function = np.zeros(shift_spectrum.shape)
+for i in range(shift_spectrum.shape[1]):
+	shift_function[:,i] = shift_spectrum[:,i] - RV_gauss
+
+N_FIESTA_freq 	= shift_spectrum.shape[1]
+fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
+for i in range(N_FIESTA_freq):
+	ax = plt.subplot(N_FIESTA_freq,1,i+1)
+	# plt.plot(bjd_daily, shift_spectrum[:, i] - RV_gauss, '.', alpha=0.5)
+	plt.errorbar(bjd_daily_copy, shift_function[:, i], err_shift_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
+	# plt.errorbar(bjd_daily, Y[:, i], err_shift_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
+	plt.ylabel(r'RV$_{%d}$' %(i+1))
+	if i != N_FIESTA_freq-1:
+		plt.xlabel('')
+		ax.set_xticks([])
+	else:
+		plt.xlabel('date_bjd')
+plt.savefig('FIESTA.png')
+plt.show()	
+
+# np.dot(X, pca.components_)
+
+from astropy.timeseries import LombScargle
+from scipy.signal import find_peaks
+# fig, axes = plt.subplots(N_FIESTA_freq, 1)
+
+time_span = (max(bjd_daily) - min(bjd_daily))
+min_f   = 1/time_span
+max_f   = 1
+spp     = 100  # spp=1000 will take a while; for quick results set spp = 10
+xc 		= 365/2
+
+fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
+plt.title('Periodogram')
+for i in range(N_FIESTA_freq):
+	ax = plt.subplot(N_FIESTA_freq,1,i+1)
+	# frequency0, power0 = LombScargle(bjd_daily, shift_function[:, i]).autopower(minimum_frequency=min_f,
+ #                                                   maximum_frequency=max_f,
+ #                                                   samples_per_peak=spp)
+
+	frequency0, power0 = LombScargle(bjd_daily, shift_function[:, i], err_shift_spectrum[:, i]).autopower(minimum_frequency=min_f,
+                                                   maximum_frequency=max_f,
+                                                   samples_per_peak=spp)
+
+	plot_x = 1/frequency0
+	plt.plot(plot_x, power0, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
+	plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.75)
+	peaks, _ = find_peaks(power0, height=max(power0[plot_x>2])*0.5)
+	plt.plot(plot_x[peaks], power0[peaks], "x")
+	for n in range(len(plot_x[peaks])):
+		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+	plt.xlim([1,time_span])
+	plt.ylim(bottom=0)
+	plt.xscale('log')
+	plt.ylabel('FIESTA%d' %(i+1))
+	if i != N_FIESTA_freq-1:
+		ax.set_xticks([])
+# plt.savefig('FIESTA_periodogram.png')
+plt.savefig('FIESTA_periodogram_weighted.png')
+plt.show()
+
+
+
+
+#----------------------------------
+# PCA 
+#----------------------------------
+
+
+X = shift_function
+
+from sklearn.preprocessing import StandardScaler
+X = StandardScaler().fit_transform(X)
+
+# Compute the Eigenvectors and Eigenvalues
+covariance_matrix = np.cov(X.T)
+eigen_values, eigen_vectors = np.linalg.eig(covariance_matrix)
+
+# Singular Value Decomposition (SVD)
+eigen_vec_svd, _, _= np.linalg.svd(X.T)
+
+variance_explained = [(i / sum(eigen_values)) * 100 for i in eigen_values]
+
+projection_matrix = (eigen_vectors.T)[:6].T
+# array = np.array([0,1,2,3,5,6,10,11,12,13])
+# projection_matrix = (eigen_vectors.T)[array].T
+
+X_pca = X.dot(projection_matrix)
+
+fig, axes = plt.subplots(figsize=(12, 10))
+for i in range(6):
+	ax = plt.subplot(6,1,i+1)
+	plt.plot(bjd_daily, X_pca[:, i], '.', alpha=0.5)
+	plt.ylabel('PCA%d' %(i+1))
+	if i != 6-1:
+		ax.set_xticks([])
+	else:
+		plt.xlabel('date_bjd')		
+plt.savefig('PCA.png')
+plt.show()
+plt.close()
+
+
+# Method 2 
+n_pca = 6
+from sklearn.decomposition import PCA
+pca = PCA(n_components=n_pca)
+x_pca = pca.fit_transform(X)
+
+fig, axes = plt.subplots(figsize=(12, 18))
+for i in range(n_pca):
+	ax = plt.subplot(n_pca,1,i+1)
+	plt.plot(bjd_daily, x_pca[:, i], '.', alpha=0.8)
+	# plt.plot(bjd_daily[19:613-1], moving_average(x_pca[:, i], 40), '-', alpha=1)
+	plt.ylabel('PCA%d' %(i+1))
+	if i != n_pca-1:
+		ax.set_xticks([])
+	else:
+		plt.xlabel('date_bjd')		
+plt.savefig('skl_PCA.png')
+plt.show()
+plt.close()
+
+print(pca.explained_variance_ratio_)
+
+cumulative_variance_explained = np.cumsum(pca.explained_variance_ratio_) * 100
+
+plt.plot(np.arange(n_pca)+1, cumulative_variance_explained, '.')
+plt.xlabel("Number of components")
+plt.ylabel("Cumulative explained variance")
+plt.title("Explained variance vs Number of components")
+plt.savefig('cumulative_variance_explained.png')
+plt.show()
+
+
+#----------------------------------
+# weighted pca
+#----------------------------------
+
+# X.shape 
+# n_samples x n_features
+
+'''
+- Ludovic -- Weighted principal component analysis: a weighted covariance eigendecomposition approach https://doi.org/10.1093/mnras/stu2219
+- wPCA python package
+		https://github.com/jakevdp/wpca
+'''
+if 0: # using the wPCA package
+
+	from wpca import PCA, WPCA, EMPCA
+
+	ThisPCA = WPCA
+	X = shift_function
+	weights = 1. / err_shift_spectrum**2
+
+	if weights is None:
+	    kwds = {}
+	else:
+	    kwds = {'weights': weights}
+
+	# Compute the PCA vectors & variance
+	pca = ThisPCA()
+
+	pca.fit(X, **kwds)
+	pca_score = pca.transform(X, **kwds)
+
+	# shouldn't be doing the wpca package for the scores because 
+	# the wpca package does not consider the non-diagonal terms 
+	for i in range(err_shift_spectrum.shape[0]):
+		w_matrix = np.diag(1. / err_shift_spectrum[i,0:10]**2)
+		err_score = np.linalg.inv(pca.components_.T @ w_matrix @ pca.components_)
+
+	# PCA variance
+	pca.explained_variance_ratio_[0:10]
+
+	print(sum(pca.explained_variance_ratio_[0:9]))
+
+
+# for now, only consider the diagonal terms 
+from wpca import PCA, WPCA, EMPCA
+X 		= shift_function
+weights = 1 / err_shift_spectrum * power_spectrum # may need to include the Fourier power later
+
+
+if weights is None:
+    kwds = {}
+else:
+    kwds = {'weights': weights}
+
+print(X.shape) # (632, 17)
+
+# subtract the weighted mean for each measurement type (dimension) of X
+X_new = np.zeros(X.shape)
+
+if 0: # or?
+	from sklearn.preprocessing import StandardScaler	
+	X_new = StandardScaler().fit_transform(X)
+
+for i in range(X.shape[1]):
+	X_new[:,i] = X[:,i] - np.average(X[:,i], weights=weights[:,i])
+
+# Compute the PCA vectors & variance
+pca = WPCA(n_components=12)
+
+pca.fit(X_new, **kwds)
+pca_score = pca.transform(X_new, **kwds)
+print(pca_score.shape) # (632, 17)
+P = pca.components_ #(17, 17)
+print(P.shape)
+
+
+#----------------------------------
+# run mcmc on X
+#----------------------------------
+
+# get the PCA components and scores
+def WPCA_results(X, weights=None, ncomp=None):
+
+	if weights is None:
+	    kwds = {}
+	else:
+	    kwds = {'weights': weights}	
+
+	if ncomp is None:
+		ncomp = X.shape[1]
+
+	X_new = np.zeros(X.shape)
+
+	for i in range(X.shape[1]):
+		X_new[:,i] = X[:,i] - np.average(X[:,i], weights=weights[:,i])
+
+	pca = WPCA(n_components = ncomp)
+	pca.fit(X_new, **kwds)
+	pca_score = pca.transform(X_new, **kwds)
+	P = pca.components_	
+
+	return P, pca_score
+
+
+pca_score_array = np.zeros((632, 12, 100))
+
+for k in range(100):
+
+	X_noise = np.random.normal(X, err_shift_spectrum)
+	_, pca_score_array[:,:,k] = WPCA_results(X_noise, weights=weights, ncomp=12)
+
+err_score_mcmc = np.std(pca_score_array, axis=2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# compare the wpca results and the one from the paper
+
+C(:,i) = inv(P'*w*P) * (P'*w*X(:,i))
+
+X_wpca = X_new.T
+X_wpca.shape #(17, 632)
+
+C 		= np.zeros((12, X.shape[0]))
+err_C 	= np.zeros(C.shape)
+
+W = weights.T
+
+P = pca.components_.T
+P.shape # (17, 12)
+
+# W = W[:, 0:10]
+for i in range(X_wpca.shape[1]):
+	w = np.diag(W[:,i])
+	C[:,i] 	= np.linalg.inv(P.T @ w @ P) @ (P.T @ w @ X_wpca[:,i])
+	# the error is discribed by a covariance matrix of C
+	Cov_C 	= np.linalg.inv(P.T @ w @ P) 
+	diag_C  = np.diag(Cov_C)
+	err_C[:, i] = diag_C**0.5
+# mcmc to check the noise #
+
+
+
+#----------------------------------
+# plot the pca scores
+#----------------------------------
+
+n_pca = 12
+fig, axes = plt.subplots(figsize=(12, n_pca))
+for i in range(n_pca):
+	ax = plt.subplot(n_pca,1,i+1)
+	# plt.plot(bjd_daily_copy, pca_score[:, i], '.', alpha=0.8)
+	# plt.plot(bjd_daily_copy, C[i,:], '.', alpha=0.8)
+	plt.errorbar(bjd_daily_copy, C[i, :], err_C[i, :], marker='.', ls='none', alpha= 0.5)
+	# plt.errorbar(bjd_daily_copy, pca_score[:, i], err_score_mcmc[:, i], marker='.', ls='none', alpha= 0.5)
+	# plt.plot(bjd_daily[19:613-1], moving_average(x_pca[:, i], 40), '-', alpha=1)
+	plt.ylabel('PCA%d' %(i+1))
+	if i != n_pca-1:
+		ax.set_xticks([])
+	else:
+		plt.xlabel('date_bjd')		
+# plt.savefig('wPCA.png')
+plt.savefig('C.png')
+plt.show()
+
+
+plt.plot(np.mean(eCCF_daily, axis=0), err_score_mcmc[:, 0], '.')
+plt.show()
+#----------------------------------
+# pca scores periodogram
+#----------------------------------
+
+time_span = (max(bjd_daily) - min(bjd_daily))
+min_f   = 1/time_span
+max_f   = 2
+spp     = 100  # spp=1000 will take a while; for quick results set spp = 10
+xc 		= 365/2
+
+fig, axes = plt.subplots(figsize=(12, n_pca))
+plt.title('Periodogram')
+for i in range(n_pca):
+	ax = plt.subplot(n_pca,1,i+1)
+	frequency0, power0 = LombScargle(bjd_daily_copy, C[i, :], err_C[i, :]).autopower(minimum_frequency=min_f,
+                                                   maximum_frequency=max_f,
+                                                   samples_per_peak=spp)
+	# frequency0, power0 = LombScargle(bjd_daily_copy, pca_score[:, i], err_score_mcmc[:, i]).autopower(minimum_frequency=min_f,
+ #                                                   maximum_frequency=max_f,
+ #                                                   samples_per_peak=spp)
+	plot_x = 1/frequency0
+	plt.plot(plot_x, power0, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
+	# plt.plot(plot_x, power1, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
+	plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.75)
+	peaks, _ = find_peaks(power0, height=max(power0[plot_x>2])*0.5)
+	plt.plot(plot_x[peaks], power0[peaks], "x")
+	for n in range(len(plot_x[peaks])):
+		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+	plt.xlim([2,time_span])
+	plt.ylim([0,max(power0[plot_x>2])])
+	plt.xscale('log')
+	plt.ylabel('PCA%d' %(i+1))
+	if i != n_pca-1:
+		ax.set_xticks([])
+	plt.savefig('wpca_periodogramC.png')
+plt.show()
+
+
+#----------------------------------
+# *principal component* periodogram
+#----------------------------------
+from astropy.timeseries import LombScargle
+from scipy.signal import find_peaks
+fig, axes = plt.subplots(n_pca, 1)
+
+time_span = (max(bjd_daily) - min(bjd_daily))
+min_f   = 1/time_span
+max_f   = 1
+spp     = 100  # spp=1000 will take a while; for quick results set spp = 10
+xc 		= 365/2
+
+fig, axes = plt.subplots(figsize=(8, 12))
+plt.title('Periodogram')
+for i in range(n_pca):
+	ax = plt.subplot(n_pca,1,i+1)
+	frequency0, power0 = LombScargle(bjd_daily, x_pca[:, i]).autopower(minimum_frequency=min_f,
+                                                   maximum_frequency=max_f,
+                                                   samples_per_peak=spp)
+
+	plot_x = 1/frequency0
+	plt.plot(plot_x, power0, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
+	plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.75)
+	peaks, _ = find_peaks(power0, height=max(power0[plot_x>2])*0.5)
+	plt.plot(plot_x[peaks], power0[peaks], "x")
+	for n in range(len(plot_x[peaks])):
+		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+	plt.xlim([1,time_span])
+	plt.ylim([0,max(power0)])
+	plt.xscale('log')
+	plt.ylabel('PCA%d' %(i+1))
+	# ax.set_xticks([])
+plt.savefig('x_pca_periodogram.png')
+
+
+#----------------------------------
+# RV periodogram
+#----------------------------------
+
+fig, axes = plt.subplots(figsize=(12, 4))
+plt.title('Periodogram')
+frequency0, power0 = LombScargle(bjd, rv, rv_err).autopower(minimum_frequency=min_f,
+                                               maximum_frequency=max_f,
+                                               samples_per_peak=spp)
+frequency1, power1 = LombScargle(bjd_daily, rv_daily).autopower(minimum_frequency=min_f,
+                                               maximum_frequency=max_f,
+                                               samples_per_peak=spp)
+
+plot_x = 1/frequency0
+plt.plot(plot_x, power0, ls='-', alpha=0.5, label='raw')
+plt.plot(1/frequency1, power1, ls='-', alpha=0.5, label='daily')
+plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.75)
+peaks, _ = find_peaks(power0, height=max(power0[plot_x>2])*0.15)
+plt.plot(plot_x[peaks], power0[peaks], "x")
+for n in range(len(plot_x[peaks])):
+	plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+plt.xlim([1,time_span])
+plt.ylim([0,max(power0)])
+plt.legend()
+plt.xscale('log')
+plt.ylabel('power')
+plt.savefig('rv_periodogram.png')
+
+
+
+XX = sigma_by_order
+XX = StandardScaler().fit_transform(XX)
+
+# Compute the Eigenvectors and Eigenvalues
+covariance_matrix = np.cov(XX.T)
+eigen_values, eigen_vectors = np.linalg.eig(covariance_matrix)
+
+# Singular Value Decomposition (SVD)
+# eigen_vec_svd, _, _= np.linalg.svd(XX.T)
+
+variance_explained = [(i / sum(eigen_values)) * 100 for i in eigen_values]
+
+projection_matrix = (eigen_vectors.T)[:2].T
+
+X_pca = X.dot(projection_matrix)
+
+fig, axes = plt.subplots(figsize=(12, 4))
+for i in range(2):
+	ax = plt.subplot(2,1,i+1)
+	plt.plot(bjd_daily, X_pca[:, i], '.', alpha=0.5)
+	plt.ylabel('PCA%d' %(i+1))
+	if i != 2-1:
+		ax.set_xticks([])
+	else:
+		plt.xlabel('date_bjd')		
+plt.savefig('PCA.png')
+plt.show()
+plt.close()
+
+
+
+fig, axes = plt.subplots(figsize=(12, 4))
+plt.plot(bjd, rv, '.', alpha=0.2, label='rv_sid')
+plt.plot(bjd_daily, rv_daily, '.', alpha=0.5, label='rv_sid_daily')
+plt.plot(bjd_daily, rv_daily)
+plt.legend()
+plt.ylabel('rv [m/s]')
+plt.savefig('rv_sid.png')	
+plt.close()
+# plt.show()
+
+
+
+
+fig, axes = plt.subplots(figsize=(12, 3))
+plt.plot(bjd, shift_spectrum[:, 0] - df['rv_raw'], '.', alpha=0.5)
+# plt.show()
+
+fig, axes = plt.subplots(figsize=(12, 4))
+plt.plot(bjd, df['rhk'], '.', alpha=0.2)
+plt.ylabel('rhk')
+plt.savefig('rhk.png')	
+# plt.show()
+plt.close()
+
+fig, axes = plt.subplots(figsize=(12, 4))
+plt.plot(bjd, df['bis_span'], '.', alpha=0.2)
+plt.ylabel('bis_span')
+plt.savefig('bis_span.png')	
+# plt.show()
+
+
+# plt.plot(df['bis_span'], df['rv'], '.', alpha=0.2)
+# plt.show()
+
+
+for n_freq in np.arange(5)+1:
+
+	# n_freq = 5
+	shift_function = np.zeros((shift_spectrum.shape[0], n_freq))
+	for i in range(n_freq):
+		shift_function[:,i] = shift_spectrum[:,i] - RV_gauss
+
+	#---------------------------#
+	# Multiple Regression Model # 
+	#---------------------------#
+
+	from sklearn import linear_model
+	regr = linear_model.LinearRegression()
+	from sklearn.model_selection import cross_val_score
+	import seaborn as sns
+
+	from sklearn.model_selection import train_test_split
+	train_x, test_x, train_y, test_y = train_test_split(shift_function, rv, test_size=0.5, random_state=42)
+
+	regr.fit (train_x, train_y)
+	# The coefficients
+	print ('Coefficients: ', regr.coef_)
+	print ('Intercept: ', regr.intercept_)
+
+	y_hat= regr.predict(test_x)
+	std = (np.sum((y_hat - test_y)**2) / np.size(test_y-1))**0.5
+	plt.plot(test_y, y_hat, marker='.', ls='', alpha=0.1, label="std = {:.2f}".format(std))
+	plt.xlabel('test RV [m/s]')
+	plt.ylabel('prediction [m/s]')
+	plt.title(n_freq)
+	plt.legend()
+	plt.gca().set_aspect('equal', adjustable='box')
+	plt.savefig(str(n_freq)+'.png')
+	plt.close()
+	# plt.show()
+
+
+
+
+
+fig, axes = plt.subplots(figsize=(12, 4))
+plt.plot(bjd[idx1], rv[idx1], '.', alpha=0.2, label='rv_sid')
+plt.ylabel('rv [m/s]')
+plt.savefig('rv_sid_s2.png')	
+plt.close()
+
+
+np.std(rv_daily)
+
+
+np.std(test_y)
+np.std(test_y - y_hat)
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Take a detailed look at 2015-07-29: file[9] to file[76]
+# observing from 9:01 to 15:24
+# group by hour 
+
+idx 				= (-10<V_grid) & (V_grid<10)
+CCF_2015_07_29 		= np.zeros((49, 76-9+1))
+CCF_2015_07_29_nor 	= np.zeros((49, 76-9+1))
+CCF_2015_07_29_daily= np.zeros(49)
+# date0 				= df['filename'][i][8:18]
+
+for i in range(9,76+1):
+	hdulist     = fits.open(valid_ccf[i])
+	data        = hdulist[1].data		
+	CCF_2015_07_29[:, i-9] 		= data[69,:]
+	CCF_2015_07_29_nor[:, i-9] 	= 1 - data[69,:] / np.mean(data[69,~idx])
+	CCF_2015_07_29_daily 		+= data[69,:]
+CCF_2015_07_29_daily = 1 - CCF_2015_07_29_daily / np.mean(CCF_2015_07_29_daily[~idx])
+
+plt.plot(V_grid, CCF_2015_07_29_daily, label='CCF_2015_07_29_daily')
+plt.savefig('CCF_2015_07_29_daily.png')
+plt.xlabel('V_grid')
+plt.ylabel('CCF')
+plt.legend()
+plt.close()
+
+for i in range(68):
+	plt.plot(V_grid, CCF_2015_07_29_nor[:,i] - CCF_2015_07_29_daily)
+plt.xlabel('V_grid')
+plt.ylabel('CCF')
+# plt.legend()
+plt.savefig('CCF_2015_07_29.png')
+plt.close()
+
+sigma_2015_07_29 = np.zeros(68)
+for i in range(68):
+	popt, pcov 	= curve_fit(gaussian, V_grid, CCF_2015_07_29_nor[:,i], p0=[0.5, (max(V_grid)+min(V_grid))/2, 1, 0])
+	sigma_2015_07_29[i] = popt[2]
+
+popt, pcov 	= curve_fit(gaussian, V_grid, CCF_2015_07_29_daily, p0=[0.5, (max(V_grid)+min(V_grid))/2, 1, 0])
+sigma_2015_07_29_daily = popt[2]
+
+
+
+
+
+
+
+
+for n_freq in np.arange(5)+1:
+
+	n_freq = 6
+	# # shift_function = np.zeros((shift_spectrum.shape[0], n_freq))
+	# for i in range(n_freq):
+	# 	shift_function[:,i] = shift_spectrum[:,i] - RV_gauss
+
+	#---------------------------#
+	# Multiple Regression Model # 
+	#---------------------------#
+
+	from sklearn import linear_model
+	regr = linear_model.LinearRegression()
+	from sklearn.model_selection import cross_val_score
+	import seaborn as sns
+
+	from sklearn.model_selection import train_test_split
+	train_x, test_x, train_y, test_y = train_test_split(X_pca, rv_daily, test_size=0.5, random_state=42)
+
+	regr.fit (train_x, train_y)
+	# The coefficients
+	print ('Coefficients: ', regr.coef_)
+	print ('Intercept: ', regr.intercept_)
+
+	y_hat= regr.predict(test_x)
+	std = (np.sum((y_hat - test_y)**2) / np.size(test_y-1))**0.5
+	plt.plot(test_y, y_hat, marker='.', ls='', alpha=0.5, label="std = {:.2f}".format(std))
+	plt.xlabel('test RV [m/s]')
+	plt.ylabel('prediction [m/s]')
+	# plt.title('PCA1 removed')
+	plt.legend()
+	plt.gca().set_aspect('equal', adjustable='box')
+	plt.savefig('pca_linear_reg' + str(n_freq)+'.png')
+	# plt.savefig('pca_linear_reg_no1.png')
+
+
+##############################################################################
+bjd_daily = bjd_daily[bjd_daily<58100]
+
+n_int = len(bjd_daily)
+decimal  = np.mean(bjd_daily - [int(bjd_daily[i]) for i in np.arange(n_int)])
+bjd_int = np.arange(int(min(bjd_daily)), int(max(bjd_daily))) + decimal
+f = interp1d(bjd_daily, rv_daily[bjd_daily_copy<58100])
+rv_daily_int = f(bjd_int)
+idx_bjd = bjd_daily_copy<58100
+
+[round(bjd_daily[i]) for i in range(len(bjd_daily))]
+
+x_pca_int = np.zeros((len(bjd_int), 10))
+for i in range(10):
+	f = interp1d(bjd_daily, pca_score[bjd_daily_copy<58100,i])
+	x_pca_int[:,i] = f(bjd_int)
+
+# Cross correlation to find the peak
+from scipy import signal
+dt = np.linspace(-(max(bjd_int)-min(bjd_int)), (max(bjd_int)-min(bjd_int)), 2*len(bjd_int)-1)
+
+fig, axes = plt.subplots(figsize=(12, 18))
+for i in range(n_pca):
+	ax = plt.subplot(n_pca,1,i+1)
+	corr_array  = signal.correlate(rv_daily_int-min(rv_daily_int), x_pca_int[:, i]-min(x_pca_int[:, i])) / sum(x_pca_int[:, i]-min(x_pca_int[:, i]))
+	plt.plot(dt, corr_array, '.', alpha=0.8)
+	print(dt[corr_array == max(corr_array)])
+	# plt.plot(bjd_daily[19:613-1], moving_average(x_pca[:, i], 40), '-', alpha=1)
+	plt.ylabel('corr_rv_PCA%d' %(i+1))
+	if i != n_pca-1:
+		ax.set_xticks([])
+	else:
+		plt.xlabel('lag')	
+	# plt.xlim(-10, 10)
+# plt.savefig('skl_PCA_corr.png')
+plt.show()
+plt.close()
+
+x_pca = pca.components_.T
+
+# [-1.]
+# [3.]
+# [-1.]
+# [0.]
+# [-5.]
+# [-8.]
+
+# [-1.]
+# [3.]
+# [-1.]
+# [0.]
+# [-5.]
+# [-8.]
+
+# fig, axes = plt.subplots(figsize=(12, 18))
+# for i in range(n_pca):
+# 	ax = plt.subplot(n_pca,1,i+1)
+# 	plt.plot(bjd_daily, signal.convolve(x_pca[:, i]-min(x_pca[:, i]) ,rv_daily-min(rv_daily), mode='same') / sum(rv_daily-min(rv_daily)), '.', alpha=0.8)
+# 	# plt.plot(bjd_daily[19:613-1], moving_average(x_pca[:, i], 40), '-', alpha=1)
+# 	plt.ylabel('corr_PCA%d' %(i+1))
+# 	if i != n_pca-1:
+# 		ax.set_xticks([])
+# 	else:
+# 		plt.xlabel('date_bjd')		
+# plt.savefig('skl_PCA_corr.png')
+# plt.show()
+
+
+
+
+n_freq = 10
+# # shift_function = np.zeros((shift_spectrum.shape[0], n_freq))
+# for i in range(n_freq):
+# 	shift_function[:,i] = shift_spectrum[:,i] - RV_gauss
+
+#---------------------------#
+# Multiple Regression Model # 
+#---------------------------#
+
+from sklearn import linear_model
+regr = linear_model.LinearRegression()
+from sklearn.model_selection import cross_val_score
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+train_x, test_x, train_y, test_y = train_test_split(x_pca, rv_daily, test_size=0.5, random_state=42)
+
+regr.fit (train_x, train_y)
+# The coefficients
+print ('Coefficients: ', regr.coef_)
+print ('Intercept: ', regr.intercept_)
+
+y_hat= regr.predict(test_x)
+std = (np.sum((y_hat - test_y)**2) / np.size(test_y-1))**0.5
+plt.plot(test_y, y_hat, marker='.', ls='', alpha=0.5, label="std = {:.2f}".format(std))
+plt.xlabel('test RV [m/s]')
+plt.ylabel('prediction [m/s]')
+# plt.title('PCA1 removed')
+plt.legend()
+plt.gca().set_aspect('equal', adjustable='box')
+plt.show()
+plt.savefig('pca_linear_reg+.png')
+
+# meshplot
+
+x = np.arange(1)
+y = np.arange(6)+1
+fig = plt.figure(frameon=False)
+plt.title('regr.coef_')
+plt.xlabel('lag [days]')
+plt.ylabel('PCA')
+ax = plt.gca()
+
+# im2 = plt.imshow(np.transpose(np.ar ray(regr.coef_)), cmap=plt.cm.viridis, alpha=.9)
+im2 = plt.imshow(np.transpose(coeff_array), cmap=plt.cm.viridis, alpha=.9)
+
+
+ax.set_xticks(np.arange(len(x)))
+ax.set_yticks(np.arange(len(y)))
+# ... and label them with the respective list entries
+ax.set_xticklabels(x)
+ax.set_yticklabels(y)
+
+
+divider = make_axes_locatable(ax)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+
+plt.colorbar(im2, cax=cax)
+plt.savefig('regr_coef_1.png')	
+
+
+#---------------------------#
+# Multiple Regression Model with multidays 
+#---------------------------#
+day = 5
+rv_daily_int_7 = rv_daily_int[day:-day]
+
+x_pca_int_7 = np.zeros((len(rv_daily_int[day:-day]), n_pca*(2*day+1)))
+
+# x_pca_int_7 = np.zeros((len(rv_daily_int), 6*(2*day+1)))
+
+for n in range(len(rv_daily_int[day:-day])):
+	for i in range((2*day+1)):
+		x_pca_int_7[n, (n_pca*i):(n_pca*i+n_pca)] = x_pca_int[n+i, :]
+
+
+from sklearn import linear_model
+regr = linear_model.LinearRegression()
+from sklearn.model_selection import cross_val_score
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+train_x, test_x, train_y, test_y = train_test_split(x_pca_int_7, rv_daily_int_7, test_size=0.5, random_state=42)
+
+regr.fit (train_x, train_y)
+# The coefficients
+print ('Coefficients: ', regr.coef_)
+print ('Intercept: ', regr.intercept_)
+
+y_hat= regr.predict(test_x)
+std = (np.sum((y_hat - test_y)**2) / np.size(test_y-1))**0.5
+plt.plot(test_y, y_hat, marker='.', ls='', alpha=0.5, label="std = {:.2f}".format(std))
+plt.xlabel('test RV [m/s]')
+plt.ylabel('prediction [m/s]')
+# plt.title('PCA1 removed')
+plt.legend()
+plt.gca().set_aspect('equal', adjustable='box')
+plt.show()
+plt.savefig('pca_linear_reg_3days.png')
+# plt.close('all')
+
+coeff_array = np.zeros((2*day+1,n_pca))
+for i in range(2*day+1):
+	coeff_array[i, :] = regr.coef_[i*n_pca:i*n_pca+n_pca]
+
+
+coeff_array_lin = coeff_array
+
+
+# meshplot
+x = np.arange(7)-3
+y = np.arange(6)+1
+
+# when layering multiple images, the images need to have the same
+# extent.  This does not mean they need to have the same shape, but
+# they both need to render to the same coordinate system determined by
+# xmin, xmax, ymin, ymax.  Note if you use different interpolations
+# for the images their apparent extent could be different due to
+# interpolation edge effects
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+extent = np.min(x), np.max(x), np.min(y), np.max(y)
+fig = plt.figure(frameon=False)
+plt.title('regr.coef_')
+plt.xlabel('lag [days]')
+plt.ylabel('PCA')
+ax = plt.gca()
+
+im2 = plt.imshow(np.transpose(coeff_array), cmap=plt.cm.viridis, alpha=.9)
+
+ax.set_xticks(np.arange(len(x)))
+ax.set_yticks(np.arange(len(y)))
+# ... and label them with the respective list entries
+ax.set_xticklabels(x)
+ax.set_yticklabels(y)
+
+
+divider = make_axes_locatable(ax)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+
+plt.colorbar(im2, cax=cax)
+# plt.savefig('regr_coef_.png')	
+# plt.savefig('lasso_coef_.png')	
+
+plt.show()
+
+
+
+#---------------------------#
+# Regression Model with LASSO
+#---------------------------#
+from sklearn.linear_model import Lasso
+X_train = train_x
+y_train = train_y
+X_test = test_x
+y_test = test_y
+
+array_unit = np.array([1, 0.5, 0.2])
+alpha_array = np.array([array_unit, array_unit/10, array_unit/100, array_unit/1000]) * 10
+alpha_array = alpha_array.flatten()
+alpha_array = np.append(alpha_array, [0.0001, 0]) * 10
+
+for alpha in alpha_array:
+	lasso =Lasso(alpha=alpha).fit(X_train,y_train)
+	coeff_array = np.zeros((day*2+1,n_pca))
+	for i in range(day*2+1):
+		coeff_array[i, :] = lasso.coef_[i*n_pca:i*n_pca+n_pca] * 100
+		#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#
+
+	y_hat= lasso.predict(test_x)
+	std = (np.sum((y_hat - test_y)**2) / np.size(test_y-1))**0.5
+
+	x = np.arange(day*2+1)-day
+	y = np.arange(n_pca)+1
+
+	from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+	extent = np.min(x), np.max(x), np.min(y), np.max(y)
+	fig = plt.figure(frameon=False)
+	plt.title('lasso_alpha = {:.4f}, '.format(alpha) 
+		+ 'score = {:.2f}, '.format(lasso.score(X_test,y_test))
+		+ 'std = {:.2f}'.format(std))
+	plt.xlabel('lag [days]')
+	plt.ylabel('PCA')
+	ax = plt.gca()
+
+	im2 = plt.imshow(np.transpose(coeff_array),  vmin=-5, vmax=5, cmap=plt.cm.bwr, alpha=.9)
+
+	# Loop over data dimensions and create text annotations.
+	for i in range(n_pca):
+	    for j in range(day*2+1):
+	    	if coeff_array[j, i] != 0:
+		        text = ax.text(j, i, '{:.2f}'.format(coeff_array[j, i]),
+		                       ha="center", va="center", color="k")
+
+	ax.set_xticks(np.arange(len(x)))
+	ax.set_yticks(np.arange(len(y)))
+	ax.set_xticklabels(x)
+	ax.set_yticklabels(y)
+
+	divider = make_axes_locatable(ax)
+	cax = divider.append_axes("right", size="5%", pad=0.05)
+
+	plt.colorbar(im2, cax=cax)
+	plt.savefig('lasso_coef_{:.5f}'.format(alpha) +'.png')	
+
+	plt.show()
+
+
+
+np.std(rv_daily) = 1.969626795017085
+
+
+
+
+
+
+
+

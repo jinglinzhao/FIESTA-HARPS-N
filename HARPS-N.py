@@ -591,12 +591,81 @@ if 0:
 	CCF_daily_corrected_trunked = CCF_daily_corrected[idx_t, :]
 
 
-
 #==============================================================================
 # Feed CCFs into FIESTA
 #==============================================================================
 # eCCF = np.zeros(CCF_daily_corrected.shape)
 # eCCF = np.zeros(CCF_daily.shape)
+
+
+np.savetxt('V_grid.txt', V_grid)
+np.savetxt('CCF_daily.txt', CCF_daily)
+np.savetxt('eCCF_daily.txt', eCCF_daily)
+
+
+
+noise_power_spectrum, noise_shift_spectrum = FIESTA(V_grid, CCF_daily, eCCF_daily, Bootstrap_sample=1001)
+
+noise_power_spectrum = noise_power_spectrum * 1000
+for k in range(noise_power_spectrum.shape[1]):
+	plt.hist(noise_power_spectrum[:,k], bins = 30)
+	plt.savefig('histogram_power_spectrum_' + str(k+1) + '.png')
+	plt.close()
+
+noise_shift_spectrum = noise_shift_spectrum * 1000
+for k in range(noise_shift_spectrum.shape[1]):
+	plt.hist(noise_shift_spectrum[:,k], bins = 50)
+	plt.savefig('histogram_shift_spectrum_' + str(k+1) + '.png')
+	plt.close()
+
+#----------------------------------
+# Normality Tests
+#----------------------------------
+# refer to https://machinelearningmastery.com/a-gentle-introduction-to-normality-tests-in-python/
+from scipy.stats import shapiro # Shapiro-Wilk Test
+from scipy.stats import normaltest # D’Agostino’s K^2 Test
+from scipy.stats import anderson # Anderson-Darling Test
+
+for k in range(noise_shift_spectrum.shape[1]):
+	data = noise_shift_spectrum[:,k]
+	alpha = 0.05
+
+	stat, p = shapiro(data)
+	if p < alpha:
+		print('Shapiro-Wilk Test: not Gaussian')
+	# if p > alpha:
+	# 	print('Sample looks Gaussian (fail to reject H0)')
+	# else:
+	# 	print('Sample does not look Gaussian (reject H0)')
+
+	stat, p = normaltest(data)
+	if p < alpha:
+		print('D’Agostino’s K^2 Test: not Gaussian')
+	# if p > alpha:
+	# 	print('Sample looks Gaussian (fail to reject H0)')
+	# else:
+	# 	print('Sample does not look Gaussian (reject H0)')
+
+	result = anderson(data)
+	# print('Statistic: %.3f' % result.statistic)
+	p = 0
+	for i in range(len(result.critical_values)):
+		sl, cv = result.significance_level[i], result.critical_values[i]
+		if result.statistic > result.critical_values[i]:
+			print(str(k) + ' Anderson-Darling Test: not Gaussian')
+		# if result.statistic < result.critical_values[i]:
+		# 	print('%.3f: %.3f, data looks normal (fail to reject H0)' % (sl, cv))
+		# else:
+		# 	print('%.3f: %.3f, data does not look normal (reject H0)' % (sl, cv))
+
+
+
+
+V_grid = np.loadtxt('V_grid.txt')
+CCF_daily = np.loadtxt('CCF_daily.txt')
+eCCF_daily = np.loadtxt('eCCF_daily.txt')
+
+
 shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
 # shift_spectrum, power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF)
 # Convertion from km/s to m/s
@@ -608,6 +677,91 @@ RV_gauss 			= RV_gauss * 1000
 
 # RV_gauss 	= RV_gauss 		- np.mean(RV_gauss)
 RV_gauss = RV_gauss - RV_gauss[0]
+
+
+rv_test = np.zeros(shift_spectrum.shape[0])
+# test the weighted averaged shift
+for i in range(shift_spectrum.shape[0]):
+	rv_test[i] = sum(shift_function[i] * power_spectrum[i]) / np.sum(power_spectrum[i])
+
+plt.plot(bjd_daily, rv_daily, '.', label='rv_daily')
+plt.xlabel('bjd')
+plt.ylabel('rv [m/s]')
+plt.legend()
+plt.savefig('rv_daily.png')
+plt.show()
+
+clean_rv = rv_daily - rv_test
+
+plt.plot(bjd_daily, clean_rv, '.')
+plt.show()
+
+plt.plot(bjd_daily, rv_test, '.', label='rv_test')
+plt.xlabel('bjd')
+plt.ylabel('rv [m/s]')
+plt.legend()
+plt.savefig('rv_test.png')
+plt.show()
+
+plt.plot(bjd_daily, rv_daily - RV_gauss, '.')
+plt.show()
+
+plt.plot(bjd_daily, rv_daily - rv_test, '.', label='rv_daily - rv_test')
+plt.xlabel('bjd')
+plt.ylabel('rv [m/s]')
+plt.legend()
+plt.savefig('rv_daily-rv_test.png')
+plt.show()
+
+np.std(rv_daily)
+np.std(rv_daily - rv_test)
+
+np.std(rv_test)
+
+frequency0, power0 = LombScargle(bjd_daily, rv_daily, erv_daily).autopower(minimum_frequency=min_f,
+                                                   maximum_frequency=max_f,
+                                                   samples_per_peak=spp)
+
+plot_x = 1 / frequency0
+plt.plot(plot_x, power0, ls='-', label='rv_daily', alpha=0.8)
+idxx = plot_x > 5
+height = max(power0[plot_x > 2]) * 0.5
+plt.axvline(x=xc, color='k', linestyle='--', alpha=0.75)
+peaks, _ = find_peaks(power0[idxx], height=height)
+plt.plot(plot_x[peaks], power0[peaks], "x")
+for n in range(len(plot_x[peaks])):
+	plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+
+frequency0, power0 = LombScargle(bjd_daily, clean_rv, erv_daily).autopower(minimum_frequency=min_f,
+                                                   maximum_frequency=max_f,
+                                                   samples_per_peak=spp)
+plt.plot(plot_x, -power0, ls='-', label='clean_rv', alpha=0.8)
+
+idxx = plot_x > 5
+height = max(power0[plot_x > 2]) * 0.5
+plt.axvline(x=xc, color='k', linestyle='--', alpha=0.75)
+plt.axvline(x=13.5, color='k', linestyle='--', alpha=0.75)
+plt.axvline(x=27, color='k', linestyle='--', alpha=0.75)
+peaks, _ = find_peaks(power0[idxx], height=height)
+plt.plot(plot_x[peaks], -power0[peaks], "x")
+for n in range(len(plot_x[peaks])):
+	plt.text(plot_x[peaks][n], -power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+plt.xlim([1, time_span])
+plt.ylim([-2 * height, 2 * height])
+plt.xscale('log')
+plt.ylabel('Power%d' % (i + 1))
+plt.legend()
+plt.savefig('FIESTA_periodogram_comparison.png')
+plt.show()
+
+
+
+
+
+
+
+
+
 
 
 if 0: # compare the rvs
@@ -642,12 +796,77 @@ if 0: # compare the rvs
 #==============================================================================
 # Plots 
 #==============================================================================
+# power spectrum time series
+
+N_FIESTA_freq 	= shift_spectrum.shape[1]
+fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
+for i in range(N_FIESTA_freq):
+	ax = plt.subplot(N_FIESTA_freq,1,i+1)
+	# plt.plot(bjd_daily, shift_spectrum[:, i] - RV_gauss, '.', alpha=0.5)
+	plt.errorbar(bjd_daily, power_spectrum[:, i], err_power_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
+	# plt.errorbar(bjd_daily, Y[:, i], err_shift_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
+	plt.ylabel(r'Power$_{%d}$' %(i+1))
+	if i != N_FIESTA_freq-1:
+		plt.xlabel('')
+		ax.set_xticks([])
+	else:
+		plt.xlabel('date_bjd')
+plt.savefig('FIESTA_power_spectrum.png')
+plt.show()
+
+
+from astropy.timeseries import LombScargle
+from scipy.signal import find_peaks
+# fig, axes = plt.subplots(N_FIESTA_freq, 1)
+
+time_span = (max(bjd_daily) - min(bjd_daily))
+min_f   = 1/time_span
+max_f   = 1
+spp     = 100  # spp=1000 will take a while; for quick results set spp = 10
+xc 		= 365/2
+
+fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
+plt.title('Periodogram')
+for i in range(N_FIESTA_freq):
+	ax = plt.subplot(N_FIESTA_freq,1,i+1)
+
+	frequency0, power0 = LombScargle(bjd_daily, power_spectrum[:, i], err_power_spectrum[:, i]).autopower(minimum_frequency=min_f,
+                                                   maximum_frequency=max_f,
+                                                   samples_per_peak=spp)
+
+	plot_x = 1/frequency0
+	idxx = plot_x>5
+	height = max(power0[plot_x>2])*0.5
+	plt.plot(plot_x, power0, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
+	plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.75)
+	peaks, _ = find_peaks(power0[idxx], height=height)
+	plt.plot(plot_x[peaks], power0[peaks], "x")
+	for n in range(len(plot_x[peaks])):
+		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+	plt.xlim([1,time_span])
+	plt.ylim([0,2*height])
+	plt.xscale('log')
+	plt.ylabel('Power%d' %(i+1))
+	if i != N_FIESTA_freq-1:
+		ax.set_xticks([])
+# plt.savefig('FIESTA_periodogram.png')
+plt.savefig('FIESTA_power_spectrum_periodogram_weighted.png')
+plt.show()
+
+
+
+
+
+
 
 # FIESTA shifts time series #
 
 shift_function = np.zeros(shift_spectrum.shape)
 for i in range(shift_spectrum.shape[1]):
 	shift_function[:,i] = shift_spectrum[:,i] - RV_gauss
+
+for i in range(shift_spectrum.shape[1]):
+	shift_function[:,i] = shift_spectrum[:,i] - rv_daily
 
 N_FIESTA_freq 	= shift_spectrum.shape[1]
 fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
@@ -707,33 +926,6 @@ for i in range(N_FIESTA_freq):
 # plt.savefig('FIESTA_periodogram.png')
 plt.savefig('FIESTA_periodogram_weighted.png')
 plt.show()
-
-
-
-
-
-
-	plot_x = 1/frequency0
-	idxx = plot_x>5
-	height = max(power0[plot_x>2])*0.5
-	plt.plot(plot_x, power0, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
-	plot_x = plot_x[idxx]
-	# plt.plot(plot_x, power1, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
-	plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.75)
-	peaks, _ = find_peaks(power0[idxx], height=height)
-	plt.plot(plot_x[peaks], power0[peaks], "x")
-	for n in range(len(plot_x[peaks])):
-		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
-	plt.xlim([2,time_span])
-	plt.ylim([0,2*height])
-	plt.xscale('log')
-	plt.ylabel('PCA%d' %(i+1))
-	if i != n_pca-1:
-		ax.set_xticks([])
-	plt.savefig('wpca_periodogram.png')
-plt.show()
-
-
 
 
 #----------------------------------
@@ -853,7 +1045,7 @@ if 0: # using the wPCA package
 # for now, only consider the diagonal terms 
 from wpca import PCA, WPCA, EMPCA
 X 		= shift_function
-weights = 1 / err_shift_spectrum * power_spectrum # may need to include the Fourier power later
+weights = 1 / err_shift_spectrum  # may need to include the Fourier power later
 
 
 if weights is None:
@@ -911,16 +1103,42 @@ def WPCA_results(X, weights=None, ncomp=None):
 	return P, pca_score
 
 
-pca_score_array = np.zeros((X.shape[0], 12, 500))
+def WPCA_results2(X, weights=None, ncomp=None):
 
-for k in range(500):
+	if weights is None:
+	    kwds = {}
+	else:
+	    kwds = {'weights': weights}
+
+	if ncomp is None:
+		ncomp = X.shape[1]
+
+	X_new = np.zeros(X.shape)
+
+	for i in range(X.shape[1]):
+		X_new[:,i] = X[:,i] - np.average(X[:,i], weights=weights[:,i])
+
+	pca_score = pca.transform(X_new, **kwds)
+	P = pca.components_
+
+	return P, pca_score
+
+
+
+pca_score_array = np.zeros((X.shape[0], 12, 1000))
+
+for k in range(1000):
 
 	X_noise = np.random.normal(X, err_shift_spectrum)
-	_, pca_score_array[:,:,k] = WPCA_results(X_noise, weights=weights, ncomp=12)
+	_, pca_score_array[:,:,k] = WPCA_results2(X_noise, weights=weights, ncomp=12)
 
 err_score_mcmc = np.std(pca_score_array, axis=2)
 
 
+for k in range(pca_score_array.shape[1]):
+	plt.hist(pca_score_array[0,k,:], bins = 20)
+	plt.savefig('histogram_pca_' + str(k+1) + '.png')
+	plt.close()
 
 # compare the wpca results and the one from the paper
 
@@ -945,10 +1163,10 @@ for i in range(X_wpca.shape[1]):
 	C[:,i] 	= np.linalg.inv(P.T @ w @ P) @ (P.T @ w @ X_wpca[:,i])
 	
 	# the error is discribed by a covariance matrix of C
-	# Cov_C 	= np.linalg.inv(P.T @ w @ P) 
+	Cov_C 	= np.linalg.inv(P.T @ w @ P) 
 
 	# inv(P'*w*P) * P' * w * cov(X(:,i)) * w * P * inv(P'*w*P)
-	Cov_C = np.linalg.inv(P.T @ w @ P) @ P.T @ w @ (np.cov(X_wpca)) @ w @ P @ np.linalg.inv(P.T @ w @ P)
+	# Cov_C = np.linalg.inv(P.T @ w @ P) @ P.T @ w @ np.diag(err_shift_spectrum[i,:])**2 @ w @ P @ np.linalg.inv(P.T @ w @ P)
 
 	diag_C  = np.diag(Cov_C)
 	err_C[:, i] = diag_C**0.5
@@ -968,23 +1186,23 @@ for i in range(n_pca):
 	ax = plt.subplot(n_pca,1,i+1)
 	# 
 	# plt.plot(bjd_daily, C[i,:], '.', alpha=0.3)
-	# plt.errorbar(bjd_daily, C[i, :], err_C[i, :], marker='.', ls='none', alpha= 0.2)
 	# plt.plot(bjd_daily, pca_score[:, i], '.', alpha=0.3)
-	plt.errorbar(bjd_daily, pca_score[:, i], err_score_mcmc[:, i], marker='.', ls='none', alpha= 0.2)
+	# plt.errorbar(bjd_daily, C[i, :], err_C[i, :], marker='.', ls='none', alpha= 0.5)
+	# plt.errorbar(bjd_daily, pca_score[:, i], err_score_mcmc[:, i], marker='.', ls='none', alpha= 0.2)
 	# plt.plot(bjd_daily[19:613-1], moving_average(x_pca[:, i], 40), '-', alpha=1)
-	# plt.plot(bjd_daily, err_C[i, :], '.', alpha=0.3)
-	# plt.plot(bjd_daily, err_score_mcmc[:, i], '.', alpha=0.3)
+	plt.plot(bjd_daily, err_C[i, :], '.', alpha=0.3)
+	plt.plot(bjd_daily, err_score_mcmc[:, i], '.', alpha=0.3)
 	plt.ylabel('PCA%d' %(i+1))
 	if i != n_pca-1:
 		ax.set_xticks([])
 	else:
 		plt.xlabel('date_bjd')		
 # plt.savefig('wPCA.png')
-plt.savefig('wPCA_err.png')
+# plt.savefig('wPCA_err.png')
 # plt.savefig('C.png')
 # plt.savefig('C_err.png')
-# plt.savefig('Compare.png')
-# plt.savefig('Compare2.png')
+# plt.savefig('Compare_score.png')
+plt.savefig('Compare_errors2.png')
 plt.show()
 
 

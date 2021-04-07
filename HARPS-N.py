@@ -69,14 +69,6 @@ if 0:
 	 	plt.plot(V_grid[idx], data[0,idx] / np.mean(data[0,~idx]))
 	plt.show()	
 
-if 0: 
-	rv 		= np.array(df['rv'])
-	rv_err 	= np.array(df['rv_err'])
-	bjd 	= np.array(df['date_bjd'])
-	rv_raw 	= np.array(df['rv_raw'])
-	rv_berv_bary_to_helio = np.array(df['berv_bary_to_helio'])
-
-
 
 if 0: 
 	#--------------------------------------------------------------------
@@ -294,6 +286,7 @@ if 0:
 array_index = np.arange(N_file)
 df 			= df.drop(array_index[abs(df['rv_diff_extinction']) >= 0.1])
 
+rv_raw 		= np.array(df['rv_raw'])
 rv 			= np.array(df['rv'])
 rv_err 		= np.array(df['rv_err'])
 bjd 		= np.array(df['date_bjd'])
@@ -306,6 +299,7 @@ bjd_daily 			= np.zeros(632)
 CCF_daily 			= np.zeros((len(V_grid), 632))
 eCCF_daily			= np.zeros((len(V_grid), 632))
 rv_daily			= np.zeros(632)
+rv_raw_daily		= np.zeros(632)
 erv_daily			= np.zeros(632)
 widening_var 		= (df['fwhm']**2 - fwhm_raw**2) / 1e6
 widening_var_daily 	= np.zeros(632)
@@ -330,6 +324,7 @@ for i in range(len(df)):
 		eCCF_daily[:, k]= eCCF_daily_sum**0.5 / np.mean(CCF_daily_sum[~idx])
 		CCF_daily[:, k] = 1 - CCF_daily_sum / np.mean(CCF_daily_sum[~idx])
 		rv_daily[k] 	= np.average(rv[i0:i], weights=1/rv_err[i0:i]**2)
+		rv_raw_daily[k] = np.average(rv_raw[i0:i], weights=1 / rv_err[i0:i] ** 2)
 		erv_daily[k] 	= (1/sum(1/rv_err[i0:i]**2))**0.5
 		bjd_daily[k] 	= np.average(bjd[i0:i], weights=1/rv_err[i0:i]**2)
 		widening_var_daily[k] = np.average(widening_var[i0:i], weights=1/rv_err[i0:i]**2)
@@ -345,12 +340,14 @@ CCF_daily[:, k] 		= 1 - CCF_daily_sum / np.mean(CCF_daily_sum[~idx])
 # eCCF_daily[:, k] 		= eCCF_daily_sum[idx]**0.5 / np.mean(CCF_daily_sum[~idx])
 # CCF_daily[:, k] 		= 1 - CCF_daily_sum[idx] / np.mean(CCF_daily_sum[~idx])
 rv_daily[k] 			= np.average(rv[i0:i+1], weights=1/rv_err[i0:i+1]**2)
+rv_raw_daily[k] 		= np.average(rv_raw[i0:i+1], weights=1/rv_err[i0:i+1]**2)
 erv_daily[k] 			= (1/sum(1/rv_err[i0:i+1]**2))**0.5
 bjd_daily[k] 			= np.average(bjd[i0:i+1], weights=1/rv_err[i0:i+1]**2)
 widening_var_daily[k] 	= np.average(widening_var[i0:i+1], weights=1/rv_err[i0:i+1]**2)
 
 idx_0 		= (rv_daily==0)
 rv_daily 	= rv_daily[~idx_0]
+rv_raw_daily= rv_raw_daily[~idx_0]
 erv_daily 	= erv_daily[~idx_0]
 bjd_daily 	= bjd_daily[~idx_0]
 CCF_daily 	= CCF_daily[:, ~idx_0]
@@ -597,174 +594,196 @@ if 0:
 # eCCF = np.zeros(CCF_daily_corrected.shape)
 # eCCF = np.zeros(CCF_daily.shape)
 
+if 0:
+	CCF_daily = CCF_daily[:, 0::5]
+	eCCF_daily = eCCF_daily[:, 0::5]
+	bjd_daily = bjd_daily[0::5]
+	rv_daily = rv_daily[0::5]
+	rv_raw_daily = rv_raw_daily[0::5]
+	erv_daily = erv_daily[0::5]
 
 np.savetxt('V_grid.txt', V_grid)
 np.savetxt('CCF_daily.txt', CCF_daily)
 np.savetxt('eCCF_daily.txt', eCCF_daily)
+np.savetxt('bjd_daily.txt', bjd_daily)
+np.savetxt('rv_daily.txt', rv_daily)
+np.savetxt('rv_raw_daily.txt', rv_raw_daily)
+np.savetxt('erv_daily.txt', erv_daily)
 
+# V_grid = np.loadtxt('V_grid.txt')
+# CCF_daily = np.loadtxt('CCF_daily.txt')
+# eCCF_daily = np.loadtxt('eCCF_daily.txt')
+# bjd_daily = np.loadtxt('bjd_daily.txt')
+# rv_daily = np.loadtxt('rv_daily.txt')
+# rv_raw_daily = np.loadtxt('rv_raw_daily.txt')
+# erv_daily = np.loadtxt('erv_daily.txt')
 
+if 0:
+	shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
 
-noise_power_spectrum, noise_shift_spectrum = FIESTA(V_grid, CCF_daily, eCCF_daily, Bootstrap_sample=1001)
+	noise_power_spectrum = noise_power_spectrum * 1000
+	for k in range(noise_power_spectrum.shape[1]):
+		plt.hist(noise_power_spectrum[:,k], bins = 30)
+		plt.savefig('histogram_power_spectrum_' + str(k+1) + '.png')
+		plt.close()
 
-noise_power_spectrum = noise_power_spectrum * 1000
-for k in range(noise_power_spectrum.shape[1]):
-	plt.hist(noise_power_spectrum[:,k], bins = 30)
-	plt.savefig('histogram_power_spectrum_' + str(k+1) + '.png')
-	plt.close()
+	noise_shift_spectrum = noise_shift_spectrum * 1000
+	for k in range(noise_shift_spectrum.shape[1]):
+		plt.hist(noise_shift_spectrum[:,k], bins = 50)
+		plt.savefig('histogram_shift_spectrum_' + str(k+1) + '.png')
+		plt.close()
 
-noise_shift_spectrum = noise_shift_spectrum * 1000
-for k in range(noise_shift_spectrum.shape[1]):
-	plt.hist(noise_shift_spectrum[:,k], bins = 50)
-	plt.savefig('histogram_shift_spectrum_' + str(k+1) + '.png')
-	plt.close()
+	#----------------------------------
+	# Normality Tests
+	#----------------------------------
+	# refer to https://machinelearningmastery.com/a-gentle-introduction-to-normality-tests-in-python/
+	from scipy.stats import shapiro # Shapiro-Wilk Test
+	from scipy.stats import normaltest # D’Agostino’s K^2 Test
+	from scipy.stats import anderson # Anderson-Darling Test
 
-#----------------------------------
-# Normality Tests
-#----------------------------------
-# refer to https://machinelearningmastery.com/a-gentle-introduction-to-normality-tests-in-python/
-from scipy.stats import shapiro # Shapiro-Wilk Test
-from scipy.stats import normaltest # D’Agostino’s K^2 Test
-from scipy.stats import anderson # Anderson-Darling Test
+	for k in range(noise_shift_spectrum.shape[1]):
+		data = noise_shift_spectrum[:,k]
+		alpha = 0.05
 
-for k in range(noise_shift_spectrum.shape[1]):
-	data = noise_shift_spectrum[:,k]
-	alpha = 0.05
-
-	stat, p = shapiro(data)
-	if p < alpha:
-		print('Shapiro-Wilk Test: not Gaussian')
-	# if p > alpha:
-	# 	print('Sample looks Gaussian (fail to reject H0)')
-	# else:
-	# 	print('Sample does not look Gaussian (reject H0)')
-
-	stat, p = normaltest(data)
-	if p < alpha:
-		print('D’Agostino’s K^2 Test: not Gaussian')
-	# if p > alpha:
-	# 	print('Sample looks Gaussian (fail to reject H0)')
-	# else:
-	# 	print('Sample does not look Gaussian (reject H0)')
-
-	result = anderson(data)
-	# print('Statistic: %.3f' % result.statistic)
-	p = 0
-	for i in range(len(result.critical_values)):
-		sl, cv = result.significance_level[i], result.critical_values[i]
-		if result.statistic > result.critical_values[i]:
-			print(str(k) + ' Anderson-Darling Test: not Gaussian')
-		# if result.statistic < result.critical_values[i]:
-		# 	print('%.3f: %.3f, data looks normal (fail to reject H0)' % (sl, cv))
+		stat, p = shapiro(data)
+		if p < alpha:
+			print('Shapiro-Wilk Test: not Gaussian')
+		# if p > alpha:
+		# 	print('Sample looks Gaussian (fail to reject H0)')
 		# else:
-		# 	print('%.3f: %.3f, data does not look normal (reject H0)' % (sl, cv))
+		# 	print('Sample does not look Gaussian (reject H0)')
+
+		stat, p = normaltest(data)
+		if p < alpha:
+			print('D’Agostino’s K^2 Test: not Gaussian')
+		# if p > alpha:
+		# 	print('Sample looks Gaussian (fail to reject H0)')
+		# else:
+		# 	print('Sample does not look Gaussian (reject H0)')
+
+		result = anderson(data)
+		# print('Statistic: %.3f' % result.statistic)
+		p = 0
+		for i in range(len(result.critical_values)):
+			sl, cv = result.significance_level[i], result.critical_values[i]
+			if result.statistic > result.critical_values[i]:
+				print(str(k) + ' Anderson-Darling Test: not Gaussian')
+			# if result.statistic < result.critical_values[i]:
+			# 	print('%.3f: %.3f, data looks normal (fail to reject H0)' % (sl, cv))
+			# else:
+			# 	print('%.3f: %.3f, data does not look normal (reject H0)' % (sl, cv))
 
 
 
-
-V_grid = np.loadtxt('V_grid.txt')
-CCF_daily = np.loadtxt('CCF_daily.txt')
-eCCF_daily = np.loadtxt('eCCF_daily.txt')
-
-
-shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
+out = 11
+shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, out=out)
+# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
 # shift_spectrum, power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF)
 # Convertion from km/s to m/s
 shift_spectrum 		= shift_spectrum * 1000
 err_shift_spectrum 	= err_shift_spectrum * 1000
 # power_spectrum 		= power_spectrum * 1000
 # err_power_spectrum 	= err_power_spectrum * 1000
-RV_gauss 			= RV_gauss * 1000
 
-# RV_gauss 	= RV_gauss 		- np.mean(RV_gauss)
-RV_gauss = RV_gauss - RV_gauss[0]
+if 0:
+	rv_test = np.zeros(shift_spectrum.shape[0])
+	# test the weighted averaged shift
+	for i in range(shift_spectrum.shape[0]):
+		rv_test[i] = sum(shift_function[i] * power_spectrum[i]) / np.sum(power_spectrum[i])
 
+plt.rcParams.update({'font.size': 20})
+alpha=0.5
+colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
+              '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
+              '#bcbd22', '#17becf']
 
-rv_test = np.zeros(shift_spectrum.shape[0])
-# test the weighted averaged shift
-for i in range(shift_spectrum.shape[0]):
-	rv_test[i] = sum(shift_function[i] * power_spectrum[i]) / np.sum(power_spectrum[i])
-
-plt.plot(bjd_daily, rv_daily, '.', label='rv_daily')
+fig, axes = plt.subplots(figsize=(20, 4))
+plt.errorbar(bjd_daily, rv_daily, erv_daily, marker='.', ls='none', alpha= 0.5)
+# plt.errorbar(bjd_daily, rv_test, erv_daily, marker='x', ls='none', alpha= 0.5)
+plt.errorbar(bjd_daily, RV_gauss*1000-np.mean(RV_gauss)*1000, erv_daily, marker='o', ls='none', alpha= 0.5)
+plt.title('HARPS-N 3 yrs solar RV')
 plt.xlabel('bjd')
 plt.ylabel('rv [m/s]')
-plt.legend()
 plt.savefig('rv_daily.png')
 plt.show()
 
-clean_rv = rv_daily - rv_test
+if 0:
+	clean_rv = rv_daily - rv_test
 
-plt.plot(bjd_daily, clean_rv, '.')
-plt.show()
+	plt.plot(bjd_daily, clean_rv, '.')
+	plt.show()
 
-plt.plot(bjd_daily, rv_test, '.', label='rv_test')
-plt.xlabel('bjd')
-plt.ylabel('rv [m/s]')
-plt.legend()
-plt.savefig('rv_test.png')
-plt.show()
+	plt.plot(bjd_daily, rv_test, '.', label='rv_test')
+	plt.xlabel('bjd')
+	plt.ylabel('rv [m/s]')
+	plt.legend()
+	plt.savefig('rv_test.png')
+	plt.show()
 
-plt.plot(bjd_daily, rv_daily - RV_gauss, '.')
-plt.show()
+	plt.plot(bjd_daily, rv_daily - RV_gauss, '.')
+	plt.show()
 
-plt.plot(bjd_daily, rv_daily - rv_test, '.', label='rv_daily - rv_test')
-plt.xlabel('bjd')
-plt.ylabel('rv [m/s]')
-plt.legend()
-plt.savefig('rv_daily-rv_test.png')
-plt.show()
+	plt.plot(bjd_daily, rv_daily - rv_test, '.', label='rv_daily - rv_test')
+	plt.xlabel('bjd')
+	plt.ylabel('rv [m/s]')
+	plt.legend()
+	plt.savefig('rv_daily-rv_test.png')
+	plt.show()
 
-np.std(rv_daily)
-np.std(rv_daily - rv_test)
+	np.std(rv_daily)
+	np.std(rv_daily - rv_test)
 
-np.std(rv_test)
+	np.std(rv_test)
 
-frequency0, power0 = LombScargle(bjd_daily, rv_daily, erv_daily).autopower(minimum_frequency=min_f,
-                                                   maximum_frequency=max_f,
-                                                   samples_per_peak=spp)
+	from astropy.timeseries import LombScargle
+	from scipy.signal import find_peaks
 
-plot_x = 1 / frequency0
-plt.plot(plot_x, power0, ls='-', label='rv_daily', alpha=0.8)
-idxx = plot_x > 5
-height = max(power0[plot_x > 2]) * 0.5
-plt.axvline(x=xc, color='k', linestyle='--', alpha=0.75)
-peaks, _ = find_peaks(power0[idxx], height=height)
-plt.plot(plot_x[peaks], power0[peaks], "x")
-for n in range(len(plot_x[peaks])):
-	plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+	time_span = (max(bjd_daily) - min(bjd_daily))
+	min_f   = 1/time_span
+	max_f   = 1
+	spp     = 100  # spp=1000 will take a while; for quick results set spp = 10
+	xc 		= 365/2
 
-frequency0, power0 = LombScargle(bjd_daily, clean_rv, erv_daily).autopower(minimum_frequency=min_f,
-                                                   maximum_frequency=max_f,
-                                                   samples_per_peak=spp)
-plt.plot(plot_x, -power0, ls='-', label='clean_rv', alpha=0.8)
+	frequency0, power0 = LombScargle(bjd_daily, rv_daily, erv_daily).autopower(minimum_frequency=min_f,
+													   maximum_frequency=max_f,
+													   samples_per_peak=spp)
 
-idxx = plot_x > 5
-height = max(power0[plot_x > 2]) * 0.5
-plt.axvline(x=xc, color='k', linestyle='--', alpha=0.75)
-plt.axvline(x=13.5, color='k', linestyle='--', alpha=0.75)
-plt.axvline(x=27, color='k', linestyle='--', alpha=0.75)
-peaks, _ = find_peaks(power0[idxx], height=height)
-plt.plot(plot_x[peaks], -power0[peaks], "x")
-for n in range(len(plot_x[peaks])):
-	plt.text(plot_x[peaks][n], -power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
-plt.xlim([1, time_span])
-plt.ylim([-2 * height, 2 * height])
-plt.xscale('log')
-plt.ylabel('Power%d' % (i + 1))
-plt.legend()
-plt.savefig('FIESTA_periodogram_comparison.png')
-plt.show()
+	plot_x = 1 / frequency0
+	plt.plot(plot_x, power0, ls='-', label='rv_daily', alpha=0.8)
+	idxx = plot_x > 5
+	height = max(power0[plot_x > 2]) * 0.5
+	plt.axvline(x=xc, color='k', linestyle='--', alpha=0.75)
+	peaks, _ = find_peaks(power0[idxx], height=height)
+	plt.plot(plot_x[peaks], power0[peaks], "x")
+	for n in range(len(plot_x[peaks])):
+		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+
+	frequency0, power0 = LombScargle(bjd_daily, clean_rv, erv_daily).autopower(minimum_frequency=min_f,
+													   maximum_frequency=max_f,
+													   samples_per_peak=spp)
+	plt.plot(plot_x, -power0, ls='-', label='clean_rv', alpha=0.8)
+
+	idxx = plot_x > 5
+	height = max(power0[plot_x > 2]) * 0.5
+	plt.axvline(x=xc, color='k', linestyle='--', alpha=0.75)
+	plt.axvline(x=13.5, color='k', linestyle='--', alpha=0.75)
+	plt.axvline(x=27, color='k', linestyle='--', alpha=0.75)
+	peaks, _ = find_peaks(power0[idxx], height=height)
+	plt.plot(plot_x[peaks], -power0[peaks], "x")
+	for n in range(len(plot_x[peaks])):
+		plt.text(plot_x[peaks][n], -power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+	plt.xlim([1, time_span])
+	plt.ylim([-2 * height, 2 * height])
+	plt.xscale('log')
+	plt.ylabel('Power%d' % (i + 1))
+	plt.legend()
+	plt.savefig('FIESTA_periodogram_comparison.png')
+	plt.show()
 
 
 
-
-
-
-
-
-
-
-
-if 0: # compare the rvs
+if 0:
+	# compare the rvs
 	fig, axes = plt.subplots(figsize=(12, 4))
 	plt.plot(bjd, rv_raw-np.mean(rv_raw), '.', alpha=0.2, label='HARPS-N')
 	plt.plot(bjd_daily, RV_gauss-np.mean(RV_gauss), '.', alpha=0.5, label='Gaussian fit of CCF_daily_corrected')
@@ -797,15 +816,17 @@ if 0: # compare the rvs
 # Plots 
 #==============================================================================
 # power spectrum time series
-
+plt.rcParams.update({'font.size': 12})
 N_FIESTA_freq 	= shift_spectrum.shape[1]
 fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
 for i in range(N_FIESTA_freq):
 	ax = plt.subplot(N_FIESTA_freq,1,i+1)
+	if i ==0:
+		plt.title('Amplitudes $A_k$')
 	# plt.plot(bjd_daily, shift_spectrum[:, i] - RV_gauss, '.', alpha=0.5)
 	plt.errorbar(bjd_daily, power_spectrum[:, i], err_power_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
 	# plt.errorbar(bjd_daily, Y[:, i], err_shift_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
-	plt.ylabel(r'Power$_{%d}$' %(i+1))
+	plt.ylabel(r'${%d}$' %(i+1))
 	if i != N_FIESTA_freq-1:
 		plt.xlabel('')
 		ax.set_xticks([])
@@ -862,20 +883,22 @@ plt.show()
 # FIESTA shifts time series #
 
 shift_function = np.zeros(shift_spectrum.shape)
-for i in range(shift_spectrum.shape[1]):
-	shift_function[:,i] = shift_spectrum[:,i] - RV_gauss
+# for i in range(shift_spectrum.shape[1]):
+# 	shift_function[:,i] = shift_spectrum[:,i] - RV_gauss
 
 for i in range(shift_spectrum.shape[1]):
-	shift_function[:,i] = shift_spectrum[:,i] - rv_daily
+	shift_function[:,i] = shift_spectrum[:,i] - rv_raw_daily
 
 N_FIESTA_freq 	= shift_spectrum.shape[1]
 fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
 for i in range(N_FIESTA_freq):
 	ax = plt.subplot(N_FIESTA_freq,1,i+1)
+	if i ==0:
+		plt.title('FIESTA RV – OBS RV')
 	# plt.plot(bjd_daily, shift_spectrum[:, i] - RV_gauss, '.', alpha=0.5)
 	plt.errorbar(bjd_daily, shift_function[:, i], err_shift_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
 	# plt.errorbar(bjd_daily, Y[:, i], err_shift_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
-	plt.ylabel(r'RV$_{%d}$' %(i+1))
+	plt.ylabel(str(i+1))
 	if i != N_FIESTA_freq-1:
 		plt.xlabel('')
 		ax.set_xticks([])
@@ -926,6 +949,23 @@ for i in range(N_FIESTA_freq):
 # plt.savefig('FIESTA_periodogram.png')
 plt.savefig('FIESTA_periodogram_weighted.png')
 plt.show()
+
+
+CCF_daily = CCF_daily[:, 0::5]
+eCCF_daily = eCCF_daily[:, 0::5]
+
+bjd_daily = bjd_daily[0::5]
+rv_daily = rv_daily[0::5]
+rv_raw_daily = rv_raw_daily[0::5]
+erv_daily = erv_daily[0::5]
+
+power_spectrum 		= power_spectrum[0::5, :]
+err_power_spectrum 	= err_power_spectrum[0::5, :]
+shift_spectrum 		= shift_spectrum[0::5, :]
+err_shift_spectrum 	= err_shift_spectrum[0::5, :]
+shift_function 		= shift_function[0::5]
+# C = C[:,0::10]
+# err_C = err_C[:,0::10]
 
 
 #----------------------------------
@@ -1044,9 +1084,19 @@ if 0: # using the wPCA package
 
 # for now, only consider the diagonal terms 
 from wpca import PCA, WPCA, EMPCA
+# X 		= power_spectrum
+# weights = 1 / err_power_spectrum  # may need to include the Fourier power later
 X 		= shift_function
-weights = 1 / err_shift_spectrum  # may need to include the Fourier power later
+weights = 1 / err_shift_spectrum # may need to include the Fourier power later
 
+mean 	= np.zeros(X.shape[1])
+std 	= np.zeros(X.shape[1])
+for i in range(X.shape[1]):
+	mean[i] 		= np.average(X[:,i], weights=weights[:,i])
+	std[i] 			= np.average((X[:,i]-mean[i])**2, weights=weights[:,i])**0.5
+
+
+# weights[:, 6:11] = weights[:, 6:11] * 10
 
 if weights is None:
     kwds = {}
@@ -1063,16 +1113,94 @@ if 0: # or?
 	X_new = StandardScaler().fit_transform(X)
 
 for i in range(X.shape[1]):
-	X_new[:,i] = X[:,i] - np.average(X[:,i], weights=weights[:,i])
+	X_new[:,i] = (X[:,i] - mean[i]) / std[i]
+	weights[:,i] 	= 1 / (err_shift_spectrum[:,i] / std[i]) # may need to include the Fourier power later
+	# weights[:, i] = 1 / (err_power_spectrum[:, i] / std[i])
+# for i in range(X.shape[1]):
+# 	X_new[:,i] = X[:,i] - mean[i]
 
+
+n_pca = X.shape[1]
+# n_pca = 2
 # Compute the PCA vectors & variance
-pca = WPCA(n_components=12)
+pca = WPCA(n_components=n_pca)
 
 pca.fit(X_new, **kwds)
 pca_score = pca.transform(X_new, **kwds)
-print(pca_score.shape) # (632, 17)
-P = pca.components_ #(12, 17)
-print(P.shape)
+# print(pca_score.shape)  # (632, 17)
+P = pca.components_  # (12, 17)
+# print(P.shape)
+
+X_wpca = X_new.T
+X_wpca.shape  # (17, 632)
+
+C = np.zeros((X.shape[1], X.shape[0]))
+err_C = np.zeros(C.shape)
+
+W = weights.T
+
+P = pca.components_.T
+# P.shape  # (17, 12)
+
+for i in range(X_wpca.shape[1]):
+	w = np.diag(W[:, i]) ** 2
+	C[:, i] = np.linalg.inv(P.T @ w @ P) @ (P.T @ w @ X_wpca[:, i])
+
+	# the error is discribed by a covariance matrix of C
+	Cov_C = np.linalg.inv(P.T @ w @ P)
+
+	# inv(P'*w*P) * P' * w * cov(X(:,i)) * w * P * inv(P'*w*P)
+	# Cov_C = np.linalg.inv(P.T @ w @ P) @ P.T @ w @ np.diag(err_shift_spectrum[i,:])**2 @ w @ P @ np.linalg.inv(P.T @ w @ P)
+
+	diag_C = np.diag(Cov_C)
+	err_C[:, i] = diag_C ** 0.5
+
+
+# determine how many pca scores are needed
+
+cumulative_variance_explained = np.cumsum(pca.explained_variance_ratio_) * 100 # look again the difference calculated from the other way
+print(cumulative_variance_explained)
+
+for i in range(len(cumulative_variance_explained)):
+	if cumulative_variance_explained[i] < 90:
+		n_pca = i
+n_pca += 2
+if cumulative_variance_explained[0]>90:
+	n_pca = 1
+
+print('{:d} pca scores account for {:.2f}% variance explained'.format(n_pca, cumulative_variance_explained[n_pca-1]))
+
+print('std(C) and midean(err_C) are\n',
+	np.around(np.std(C[0:n_pca,:], axis=1), decimals=1), '\n',
+	np.around(np.median(err_C[0:n_pca,:], axis=1), decimals=1))
+
+for i in range(n_pca):
+	np.savetxt('C' + str(i+1) + '.txt', C[i,:])
+	np.savetxt('err_C' + str(i+1) + '.txt', err_C[i, :])
+
+
+
+rv_test = np.zeros(shift_spectrum.shape[0])
+# test the weighted averaged shift
+for i in range(shift_spectrum.shape[0]):
+	rv_test[i] = sum(shift_function[i] * power_spectrum[i,:]) / np.sum(power_spectrum[i,:])
+
+
+
+
+
+
+
+if 0:
+
+	# Compute the PCA vectors & variance
+	pca = WPCA(n_components=12)
+
+	pca.fit(X_new, **kwds)
+	pca_score = pca.transform(X_new, **kwds)
+	print(pca_score.shape) # (632, 17)
+	P = pca.components_ #(12, 17)
+	print(P.shape)
 
 
 #----------------------------------
@@ -1172,26 +1300,30 @@ for i in range(X_wpca.shape[1]):
 	err_C[:, i] = diag_C**0.5
 
 
+for i in range(5):
+	np.savetxt('C' + str(i+1) + '.txt', C[i,:])
+	np.savetxt('err_C' + str(i+1) + '.txt', err_C[i, :])
 
-
-
+np.savetxt('bjd_daily.txt', bjd_daily)
+np.savetxt('rv_daily.txt', rv_daily)
+np.savetxt('erv_daily.txt', erv_daily)
 
 #----------------------------------
 # plot the pca scores
 #----------------------------------
 
-n_pca = 12
-fig, axes = plt.subplots(figsize=(12, n_pca))
+plt.rcParams.update({'font.size': 16})
+fig, axes = plt.subplots(figsize=(18, n_pca*1.5))
 for i in range(n_pca):
 	ax = plt.subplot(n_pca,1,i+1)
 	# 
 	# plt.plot(bjd_daily, C[i,:], '.', alpha=0.3)
 	# plt.plot(bjd_daily, pca_score[:, i], '.', alpha=0.3)
-	# plt.errorbar(bjd_daily, C[i, :], err_C[i, :], marker='.', ls='none', alpha= 0.5)
+	plt.errorbar(bjd_daily, C[i, :], err_C[i, :], marker='.', ls='none', alpha= 0.5)
 	# plt.errorbar(bjd_daily, pca_score[:, i], err_score_mcmc[:, i], marker='.', ls='none', alpha= 0.2)
 	# plt.plot(bjd_daily[19:613-1], moving_average(x_pca[:, i], 40), '-', alpha=1)
-	plt.plot(bjd_daily, err_C[i, :], '.', alpha=0.3)
-	plt.plot(bjd_daily, err_score_mcmc[:, i], '.', alpha=0.3)
+	# plt.plot(bjd_daily, err_C[i, :], '.', alpha=0.3)
+	# plt.plot(bjd_daily, err_score_mcmc[:, i], '.', alpha=0.3)
 	plt.ylabel('PCA%d' %(i+1))
 	if i != n_pca-1:
 		ax.set_xticks([])
@@ -1199,10 +1331,10 @@ for i in range(n_pca):
 		plt.xlabel('date_bjd')		
 # plt.savefig('wPCA.png')
 # plt.savefig('wPCA_err.png')
-# plt.savefig('C.png')
+plt.savefig('C.png')
 # plt.savefig('C_err.png')
 # plt.savefig('Compare_score.png')
-plt.savefig('Compare_errors2.png')
+# plt.savefig('Compare_errors2.png')
 plt.show()
 
 
@@ -1223,12 +1355,12 @@ fig, axes = plt.subplots(figsize=(12, n_pca))
 plt.title('Periodogram')
 for i in range(n_pca):
 	ax = plt.subplot(n_pca,1,i+1)
-	# frequency0, power0 = LombScargle(bjd_daily, C[i, :], err_C[i, :]).autopower(minimum_frequency=min_f,
- #                                                   maximum_frequency=max_f,
- #                                                   samples_per_peak=spp)
-	frequency0, power0 = LombScargle(bjd_daily, pca_score[:, i], err_score_mcmc[:, i]).autopower(minimum_frequency=min_f,
+	frequency0, power0 = LombScargle(bjd_daily, C[i, :], err_C[i, :]).autopower(minimum_frequency=min_f,
                                                    maximum_frequency=max_f,
                                                    samples_per_peak=spp)
+	# frequency0, power0 = LombScargle(bjd_daily, pca_score[:, i], err_score_mcmc[:, i]).autopower(minimum_frequency=min_f,
+ #                                                   maximum_frequency=max_f,
+ #                                                   samples_per_peak=spp)
 	plot_x = 1/frequency0
 	idxx = plot_x>5
 	height = max(power0[plot_x>2])*0.5
@@ -1810,9 +1942,17 @@ if 0:
 		plt.show()
 
 
+# compare the hyperparameters
 
+hp = np.zeros((6,19))
+dir = '/Users/az/Documents/GitHub/GLOM_RV_Example/hyperparameters/'
+for i in range(6):
+	hp[i,:] = np.loadtxt(dir+'HARPS_N_fit1_total_hyperparameters_'+str(i)+'.txt')
 
-
-
+for i in range(19):
+	plt.plot(np.arange(6)+1, hp[:,i], '-')
+	plt.title('hyperparameter_'+str(i+1))
+	plt.savefig(dir+'hyperparameter_'+str(i+1)+'.png')
+	plt.close()
 
 

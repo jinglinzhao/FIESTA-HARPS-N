@@ -2,11 +2,9 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="c72ade28-4bdf-493d-beab-eec2bb93de73" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/FIESTA.png" beforeDir="false" afterPath="$PROJECT_DIR$/FIESTA.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/FIESTA_periodogram_weighted.png" beforeDir="false" afterPath="$PROJECT_DIR$/FIESTA_periodogram_weighted.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/FIESTA_periodogram_weighted.png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/HARPS-N.py" beforeDir="false" afterPath="$PROJECT_DIR$/HARPS-N.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/wpca_periodogram.png" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -68,7 +66,7 @@
       <option name="presentableId" value="Default" />
       <updated>1616763547895</updated>
       <workItem from="1616763553033" duration="41228000" />
-      <workItem from="1617756531027" duration="408000" />
+      <workItem from="1617756531027" duration="10721000" />
     </task>
     <servers />
   </component>
@@ -80,12 +78,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/HARPS-N.py</url>
-          <line>709</line>
-          <option name="timeStamp" value="1" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/HARPS-N.py</url>
-          <line>620</line>
+          <line>621</line>
           <option name="timeStamp" value="2" />
         </line-breakpoint>
       </breakpoints>

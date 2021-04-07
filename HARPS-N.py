@@ -618,6 +618,7 @@ np.savetxt('erv_daily.txt', erv_daily)
 # rv_raw_daily = np.loadtxt('rv_raw_daily.txt')
 # erv_daily = np.loadtxt('erv_daily.txt')
 
+# normality tests
 if 0:
 	shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
 
@@ -674,23 +675,29 @@ if 0:
 			# 	print('%.3f: %.3f, data does not look normal (reject H0)' % (sl, cv))
 
 
-
 out = 11
 shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, out=out)
 # shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
-# shift_spectrum, power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF)
 # Convertion from km/s to m/s
-shift_spectrum 		= shift_spectrum * 1000
-err_shift_spectrum 	= err_shift_spectrum * 1000
-# power_spectrum 		= power_spectrum * 1000
-# err_power_spectrum 	= err_power_spectrum * 1000
+shift_spectrum 		*=1000
+err_shift_spectrum 	*= 1000
+RV_gauss 			*= 1000
 
-if 0:
-	rv_test = np.zeros(shift_spectrum.shape[0])
-	# test the weighted averaged shift
-	for i in range(shift_spectrum.shape[0]):
-		rv_test[i] = sum(shift_function[i] * power_spectrum[i]) / np.sum(power_spectrum[i])
+shift_function = np.zeros(shift_spectrum.shape)
+for i in range(shift_spectrum.shape[1]):
+	shift_function[:,i] = shift_spectrum[:,i] - rv_raw_daily
 
+# test the weighted averaged shift
+rv_test = np.zeros(shift_spectrum.shape[0])
+for i in range(shift_spectrum.shape[0]):
+	rv_test[i] = sum(shift_function[i] * power_spectrum[i]) / np.sum(power_spectrum[i])
+
+# for i in range(shift_spectrum.shape[0]):
+# 	rv_test[i] = sum(shift_spectrum[i] * power_spectrum[i]) / np.sum(power_spectrum[i])
+
+#----------------#
+# RV time-series #
+#----------------#
 plt.rcParams.update({'font.size': 20})
 alpha=0.5
 colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
@@ -698,37 +705,48 @@ colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
               '#bcbd22', '#17becf']
 
 fig, axes = plt.subplots(figsize=(20, 4))
-plt.errorbar(bjd_daily, rv_daily, erv_daily, marker='.', ls='none', alpha= 0.5)
-# plt.errorbar(bjd_daily, rv_test, erv_daily, marker='x', ls='none', alpha= 0.5)
-plt.errorbar(bjd_daily, RV_gauss*1000-np.mean(RV_gauss)*1000, erv_daily, marker='o', ls='none', alpha= 0.5)
+plt.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, marker='.', ls='none', alpha= 0.5, label='rv_daily')
+plt.errorbar(bjd_daily, rv_test-np.mean(rv_test), erv_daily, marker='x', ls='none', alpha= 0.5, label='FIESTA weighted mean')
 plt.title('HARPS-N 3 yrs solar RV')
+plt.legend()
 plt.xlabel('bjd')
 plt.ylabel('rv [m/s]')
 plt.savefig('rv_daily.png')
 plt.show()
 
+fig, axes = plt.subplots(figsize=(20, 4))
+plt.errorbar(bjd_daily, rv_raw_daily - np.mean(rv_raw_daily), erv_daily, marker='o', ls='none', alpha= 0.5, label='rv_raw_daily')
+plt.errorbar(bjd_daily, RV_gauss-np.mean(RV_gauss), erv_daily, marker='o', ls='none', alpha= 0.5, label='RV_Gauss')
+plt.title('HARPS-N 3 yrs solar RV')
+plt.legend()
+plt.xlabel('bjd')
+plt.ylabel('rv [m/s]')
+plt.savefig('rv_raw_daily.png')
+plt.show()
+
+# I do not understand why rv_test is not 0 as expected
 if 0:
 	clean_rv = rv_daily - rv_test
 
-	plt.plot(bjd_daily, clean_rv, '.')
+	plt.plot(rv_daily, clean_rv, '.')
 	plt.show()
 
-	plt.plot(bjd_daily, rv_test, '.', label='rv_test')
+	plt.plot(bjd_daily, rv_daily-np.mean(rv_daily), '.', label='rv_daily')
+	plt.plot(bjd_daily, 4*(rv_test-np.mean(rv_test)), '.', label='rv_test')
 	plt.xlabel('bjd')
 	plt.ylabel('rv [m/s]')
 	plt.legend()
-	plt.savefig('rv_test.png')
-	plt.show()
-
-	plt.plot(bjd_daily, rv_daily - RV_gauss, '.')
+	# plt.savefig('rv_daily-rv_test.png')
 	plt.show()
 
 	plt.plot(bjd_daily, rv_daily - rv_test, '.', label='rv_daily - rv_test')
 	plt.xlabel('bjd')
 	plt.ylabel('rv [m/s]')
 	plt.legend()
-	plt.savefig('rv_daily-rv_test.png')
+	# plt.savefig('rv_daily-rv_test.png')
 	plt.show()
+
+
 
 	np.std(rv_daily)
 	np.std(rv_daily - rv_test)
@@ -758,10 +776,10 @@ if 0:
 	for n in range(len(plot_x[peaks])):
 		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
 
-	frequency0, power0 = LombScargle(bjd_daily, clean_rv, erv_daily).autopower(minimum_frequency=min_f,
+	frequency0, power0 = LombScargle(bjd_daily, rv_test, erv_daily).autopower(minimum_frequency=min_f,
 													   maximum_frequency=max_f,
 													   samples_per_peak=spp)
-	plt.plot(plot_x, -power0, ls='-', label='clean_rv', alpha=0.8)
+	plt.plot(plot_x, -power0, ls='-', label='rv_test', alpha=0.8)
 
 	idxx = plot_x > 5
 	height = max(power0[plot_x > 2]) * 0.5
@@ -779,7 +797,6 @@ if 0:
 	plt.legend()
 	plt.savefig('FIESTA_periodogram_comparison.png')
 	plt.show()
-
 
 
 if 0:
@@ -815,140 +832,96 @@ if 0:
 #==============================================================================
 # Plots 
 #==============================================================================
-# power spectrum time series
 plt.rcParams.update({'font.size': 12})
-N_FIESTA_freq 	= shift_spectrum.shape[1]
-fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
-for i in range(N_FIESTA_freq):
-	ax = plt.subplot(N_FIESTA_freq,1,i+1)
-	if i ==0:
-		plt.title('Amplitudes $A_k$')
-	# plt.plot(bjd_daily, shift_spectrum[:, i] - RV_gauss, '.', alpha=0.5)
-	plt.errorbar(bjd_daily, power_spectrum[:, i], err_power_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
-	# plt.errorbar(bjd_daily, Y[:, i], err_shift_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
-	plt.ylabel(r'${%d}$' %(i+1))
-	if i != N_FIESTA_freq-1:
-		plt.xlabel('')
-		ax.set_xticks([])
-	else:
-		plt.xlabel('date_bjd')
-plt.savefig('FIESTA_power_spectrum.png')
-plt.show()
+
+def time_series(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
+				title='Time series',
+				file_name='Time_series.png'):
+	if N==None:
+		N = y.shape[1]
+	plt.subplots(figsize=(12, N))
+
+	for i in range(N):
+		ax = plt.subplot(N, 1, i+1)
+		if i == 0:
+			plt.title(title)
+		plt.errorbar(x, y[:, i], dy[:, i], marker='.', ls='none', alpha=0.5)
+		plt.ylabel(str(i+1))
+		if i != N-1:
+			ax.set_xticks([])
+		else:
+			plt.xlabel('date_bjd')
+	plt.savefig(file_name)
+	plt.show()
 
 
 from astropy.timeseries import LombScargle
 from scipy.signal import find_peaks
-# fig, axes = plt.subplots(N_FIESTA_freq, 1)
 
-time_span = (max(bjd_daily) - min(bjd_daily))
-min_f   = 1/time_span
-max_f   = 1
-spp     = 100  # spp=1000 will take a while; for quick results set spp = 10
-xc 		= 365/2
+def periodogram(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
+				plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=None,
+				title = 'Periodogram',
+				file_name='Periodogram.png'):
 
-fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
-plt.title('Periodogram')
-for i in range(N_FIESTA_freq):
-	ax = plt.subplot(N_FIESTA_freq,1,i+1)
+	if N==None:
+		N = y.shape[1]
+	time_span = (max(x) - min(x))
+	min_f   = 1/time_span
 
-	frequency0, power0 = LombScargle(bjd_daily, power_spectrum[:, i], err_power_spectrum[:, i]).autopower(minimum_frequency=min_f,
-                                                   maximum_frequency=max_f,
-                                                   samples_per_peak=spp)
+	plt.subplots(figsize=(12, N_FIESTA_freq))
 
-	plot_x = 1/frequency0
-	idxx = plot_x>5
-	height = max(power0[plot_x>2])*0.5
-	plt.plot(plot_x, power0, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
-	plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.75)
-	peaks, _ = find_peaks(power0[idxx], height=height)
-	plt.plot(plot_x[peaks], power0[peaks], "x")
-	for n in range(len(plot_x[peaks])):
-		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
-	plt.xlim([1,time_span])
-	plt.ylim([0,2*height])
-	plt.xscale('log')
-	plt.ylabel('Power%d' %(i+1))
-	if i != N_FIESTA_freq-1:
-		ax.set_xticks([])
-# plt.savefig('FIESTA_periodogram.png')
-plt.savefig('FIESTA_power_spectrum_periodogram_weighted.png')
-plt.show()
+	for i in range(N):
+		ax = plt.subplot(N,1,i+1)
+		if i == 0:
+			plt.title(title)
+
+		frequency, power = LombScargle(x, y[:, i], dy[:, i]).autopower(minimum_frequency=min_f,
+													   maximum_frequency=max_f,
+													   samples_per_peak=spp)
+
+		plot_x = 1/frequency
+		idxx = plot_x>study_min_t
+		height = max(power[plot_x>study_min_t])*0.5
+		plt.plot(plot_x, power, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
+		peaks, _ = find_peaks(power[idxx], height=height)
+		plt.plot(plot_x[peaks], power[peaks], "o")
+		if xc != None:
+			plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.5)
+
+		for n in range(len(plot_x[peaks])):
+			plt.text(plot_x[peaks][n], power[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
+
+		plt.xlim([plot_min_t,time_span])
+		plt.ylim([0,2.5*height])
+		plt.xscale('log')
+		plt.ylabel(str(i+1))
+
+		if i != N-1:
+			ax.set_xticks([])
+		else:
+			plt.xlabel('date_bjd')
+
+	plt.savefig(file_name)
+	plt.show()
 
 
+time_series(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
+				title='$A_k$ time series',
+				file_name='FIESTA_amplitude_time_series.png')
 
+periodogram(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
+			plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=365/2,
+			title='$A_k$ Periodogram',
+			file_name='FIESTA_amplitude_periodogram.png')
 
+time_series(x=bjd_daily, y=shift_function, dy=err_shift_spectrum, N=None,
+				title=r'$\Delta RV$ time series',
+				file_name='FIESTA_amplitude_time_series.png')
 
-
-
-# FIESTA shifts time series #
-
-shift_function = np.zeros(shift_spectrum.shape)
-# for i in range(shift_spectrum.shape[1]):
-# 	shift_function[:,i] = shift_spectrum[:,i] - RV_gauss
-
-for i in range(shift_spectrum.shape[1]):
-	shift_function[:,i] = shift_spectrum[:,i] - rv_raw_daily
-
-N_FIESTA_freq 	= shift_spectrum.shape[1]
-fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
-for i in range(N_FIESTA_freq):
-	ax = plt.subplot(N_FIESTA_freq,1,i+1)
-	if i ==0:
-		plt.title('FIESTA RV – OBS RV')
-	# plt.plot(bjd_daily, shift_spectrum[:, i] - RV_gauss, '.', alpha=0.5)
-	plt.errorbar(bjd_daily, shift_function[:, i], err_shift_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
-	# plt.errorbar(bjd_daily, Y[:, i], err_shift_spectrum[:, i], marker='.', ls='none', alpha= 0.5)
-	plt.ylabel(str(i+1))
-	if i != N_FIESTA_freq-1:
-		plt.xlabel('')
-		ax.set_xticks([])
-	else:
-		plt.xlabel('date_bjd')
-plt.savefig('FIESTA.png')
-plt.show()	
-
-# np.dot(X, pca.components_)
-
-from astropy.timeseries import LombScargle
-from scipy.signal import find_peaks
-# fig, axes = plt.subplots(N_FIESTA_freq, 1)
-
-time_span = (max(bjd_daily) - min(bjd_daily))
-min_f   = 1/time_span
-max_f   = 1
-spp     = 100  # spp=1000 will take a while; for quick results set spp = 10
-xc 		= 365/2
-
-fig, axes = plt.subplots(figsize=(12, N_FIESTA_freq))
-plt.title('Periodogram')
-for i in range(N_FIESTA_freq):
-	ax = plt.subplot(N_FIESTA_freq,1,i+1)
-	# frequency0, power0 = LombScargle(bjd_daily, shift_function[:, i]).autopower(minimum_frequency=min_f,
- #                                                   maximum_frequency=max_f,
- #                                                   samples_per_peak=spp)
-
-	frequency0, power0 = LombScargle(bjd_daily, shift_function[:, i], err_shift_spectrum[:, i]).autopower(minimum_frequency=min_f,
-                                                   maximum_frequency=max_f,
-                                                   samples_per_peak=spp)
-
-	plot_x = 1/frequency0
-	idxx = plot_x>5
-	height = max(power0[plot_x>2])*0.5
-	plt.plot(plot_x, power0, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
-	plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.75)
-	peaks, _ = find_peaks(power0[idxx], height=height)
-	plt.plot(plot_x[peaks], power0[peaks], "x")
-	for n in range(len(plot_x[peaks])):
-		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
-	plt.xlim([1,time_span])
-	plt.ylim([0,2*height])
-	plt.xscale('log')
-	plt.ylabel('FIESTA%d' %(i+1))
-	if i != N_FIESTA_freq-1:
-		ax.set_xticks([])
-# plt.savefig('FIESTA_periodogram.png')
-plt.savefig('FIESTA_periodogram_weighted.png')
-plt.show()
+periodogram(x=bjd_daily, y=shift_function, dy=err_shift_spectrum, N=None,
+			plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=365/2,
+			title=r'$\Delta RV$ Periodogram',
+			file_name='FIESTA_shift_periodogram.png')
 
 
 CCF_daily = CCF_daily[:, 0::5]
@@ -964,8 +937,6 @@ err_power_spectrum 	= err_power_spectrum[0::5, :]
 shift_spectrum 		= shift_spectrum[0::5, :]
 err_shift_spectrum 	= err_shift_spectrum[0::5, :]
 shift_function 		= shift_function[0::5]
-# C = C[:,0::10]
-# err_C = err_C[:,0::10]
 
 
 #----------------------------------
@@ -1103,14 +1074,12 @@ if weights is None:
 else:
     kwds = {'weights': weights}
 
-print(X.shape) # (632, 17)
-
 # subtract the weighted mean for each measurement type (dimension) of X
 X_new = np.zeros(X.shape)
 
 if 0: # or?
 	from sklearn.preprocessing import StandardScaler	
-	X_new = StandardScaler().fit_transform(X)
+	X_new2 = StandardScaler().fit_transform(X)
 
 for i in range(X.shape[1]):
 	X_new[:,i] = (X[:,i] - mean[i]) / std[i]
@@ -1177,18 +1146,6 @@ print('std(C) and midean(err_C) are\n',
 for i in range(n_pca):
 	np.savetxt('C' + str(i+1) + '.txt', C[i,:])
 	np.savetxt('err_C' + str(i+1) + '.txt', err_C[i, :])
-
-
-
-rv_test = np.zeros(shift_spectrum.shape[0])
-# test the weighted averaged shift
-for i in range(shift_spectrum.shape[0]):
-	rv_test[i] = sum(shift_function[i] * power_spectrum[i,:]) / np.sum(power_spectrum[i,:])
-
-
-
-
-
 
 
 if 0:
@@ -1304,10 +1261,6 @@ for i in range(5):
 	np.savetxt('C' + str(i+1) + '.txt', C[i,:])
 	np.savetxt('err_C' + str(i+1) + '.txt', err_C[i, :])
 
-np.savetxt('bjd_daily.txt', bjd_daily)
-np.savetxt('rv_daily.txt', rv_daily)
-np.savetxt('erv_daily.txt', erv_daily)
-
 #----------------------------------
 # plot the pca scores
 #----------------------------------
@@ -1344,42 +1297,11 @@ plt.show()
 #----------------------------------
 # pca scores periodogram
 #----------------------------------
+periodogram(x=bjd_daily, y=C.T, dy=err_C.T, N=n_pca,
+			plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=365/2,
+			title='Shift PCA Periodogram',
+			file_name='FIESTA_shift_PCA_periodogram.png')
 
-time_span = (max(bjd_daily) - min(bjd_daily))
-min_f   = 1/time_span
-max_f   = 2
-spp     = 100  # spp=1000 will take a while; for quick results set spp = 10
-xc 		= 365/2
-
-fig, axes = plt.subplots(figsize=(12, n_pca))
-plt.title('Periodogram')
-for i in range(n_pca):
-	ax = plt.subplot(n_pca,1,i+1)
-	frequency0, power0 = LombScargle(bjd_daily, C[i, :], err_C[i, :]).autopower(minimum_frequency=min_f,
-                                                   maximum_frequency=max_f,
-                                                   samples_per_peak=spp)
-	# frequency0, power0 = LombScargle(bjd_daily, pca_score[:, i], err_score_mcmc[:, i]).autopower(minimum_frequency=min_f,
- #                                                   maximum_frequency=max_f,
- #                                                   samples_per_peak=spp)
-	plot_x = 1/frequency0
-	idxx = plot_x>5
-	height = max(power0[plot_x>2])*0.5
-	plt.plot(plot_x, power0, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
-	plot_x = plot_x[idxx]
-	# plt.plot(plot_x, power1, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
-	plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.75)
-	peaks, _ = find_peaks(power0[idxx], height=height)
-	plt.plot(plot_x[peaks], power0[peaks], "x")
-	for n in range(len(plot_x[peaks])):
-		plt.text(plot_x[peaks][n], power0[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=12)
-	plt.xlim([2,time_span])
-	plt.ylim([0,2*height])
-	plt.xscale('log')
-	plt.ylabel('PCA%d' %(i+1))
-	if i != n_pca-1:
-		ax.set_xticks([])
-	plt.savefig('wpca_periodogram.png')
-plt.show()
 
 if 0:
 	#----------------------------------

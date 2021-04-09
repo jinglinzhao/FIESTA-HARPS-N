@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="c72ade28-4bdf-493d-beab-eec2bb93de73" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HARPS-N.py" beforeDir="false" afterPath="$PROJECT_DIR$/HARPS-N.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/wpca/wpca_edit.py" beforeDir="false" />
-    </list>
+    <list default="true" id="c72ade28-4bdf-493d-beab-eec2bb93de73" name="Default Changelist" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -66,7 +62,7 @@
       <option name="presentableId" value="Default" />
       <updated>1616763547895</updated>
       <workItem from="1616763553033" duration="41228000" />
-      <workItem from="1617756531027" duration="39999000" />
+      <workItem from="1617756531027" duration="40284000" />
     </task>
     <servers />
   </component>

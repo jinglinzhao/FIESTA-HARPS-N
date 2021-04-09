@@ -610,13 +610,13 @@ np.savetxt('rv_daily.txt', rv_daily)
 np.savetxt('rv_raw_daily.txt', rv_raw_daily)
 np.savetxt('erv_daily.txt', erv_daily)
 
-# V_grid = np.loadtxt('V_grid.txt')
-# CCF_daily = np.loadtxt('CCF_daily.txt')
-# eCCF_daily = np.loadtxt('eCCF_daily.txt')
-# bjd_daily = np.loadtxt('bjd_daily.txt')
-# rv_daily = np.loadtxt('rv_daily.txt')
-# rv_raw_daily = np.loadtxt('rv_raw_daily.txt')
-# erv_daily = np.loadtxt('erv_daily.txt')
+V_grid = np.loadtxt('V_grid.txt')
+CCF_daily = np.loadtxt('CCF_daily.txt')
+eCCF_daily = np.loadtxt('eCCF_daily.txt')
+bjd_daily = np.loadtxt('bjd_daily.txt')
+rv_daily = np.loadtxt('rv_daily.txt')
+rv_raw_daily = np.loadtxt('rv_raw_daily.txt')
+erv_daily = np.loadtxt('erv_daily.txt')
 
 # normality tests
 if 0:
@@ -835,6 +835,7 @@ if 0:
 plt.rcParams.update({'font.size': 12})
 
 def time_series(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
+				ylabel='',
 				title='Time series',
 				file_name='Time_series.png'):
 	if N==None:
@@ -846,7 +847,7 @@ def time_series(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
 		if i == 0:
 			plt.title(title)
 		plt.errorbar(x, y[:, i], dy[:, i], marker='.', ls='none', alpha=0.5)
-		plt.ylabel(str(i+1))
+		plt.ylabel(ylabel+str(i+1))
 		if i != N-1:
 			ax.set_xticks([])
 		else:
@@ -916,7 +917,7 @@ periodogram(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
 
 time_series(x=bjd_daily, y=shift_function, dy=err_shift_spectrum, N=None,
 				title=r'$\Delta RV$ time series',
-				file_name='FIESTA_amplitude_time_series.png')
+				file_name='FIESTA_shift_time_series.png')
 
 periodogram(x=bjd_daily, y=shift_function, dy=err_shift_spectrum, N=None,
 			plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=365/2,
@@ -1054,94 +1055,171 @@ if 0: # using the wPCA package
 
 
 # for now, only consider the diagonal terms 
-from wpca import PCA, WPCA, EMPCA
 # X 		= power_spectrum
 # weights = 1 / err_power_spectrum  # may need to include the Fourier power later
 X 		= shift_function
 weights = 1 / err_shift_spectrum # may need to include the Fourier power later
 
-mean 	= np.zeros(X.shape[1])
-std 	= np.zeros(X.shape[1])
-for i in range(X.shape[1]):
-	mean[i] 		= np.average(X[:,i], weights=weights[:,i])
-	std[i] 			= np.average((X[:,i]-mean[i])**2, weights=weights[:,i])**0.5
+np.savetxt('X.txt', X_new)
+np.savetxt('X_err.txt', err_shift_spectrum)
+np.savetxt('W.txt', weights)
 
 
 # weights[:, 6:11] = weights[:, 6:11] * 10
 
-if weights is None:
-    kwds = {}
-else:
-    kwds = {'weights': weights}
+def my_pca(X=shift_function, X_err=err_shift_spectrum, n_pca=None, nor=False):
+	'''
+	X.shape 	= (n_samples, n_features)
+	X_err.shape = (n_samples, n_features)
+	nor: normalization = True / False
+	'''
+	from wpca import WPCA
 
-# subtract the weighted mean for each measurement type (dimension) of X
-X_new = np.zeros(X.shape)
+	# X_err[:, 6] *= 1
+	weights = 1/X_err
+	weights = np.ones(weights.shape)
+	# weights[:, 0] = weights[:, 0] / 100
+	kwds 	= {'weights': weights}
 
-if 0: # or?
-	from sklearn.preprocessing import StandardScaler	
-	X_new2 = StandardScaler().fit_transform(X)
+	# subtract the weighted mean for each measurement type (dimension) of X
+	X_new 	= np.zeros(X.shape)
+	mean 	= np.zeros(X.shape[1])
+	std 	= np.zeros(X.shape[1])
 
-for i in range(X.shape[1]):
-	X_new[:,i] = (X[:,i] - mean[i]) / std[i]
-	weights[:,i] 	= 1 / (err_shift_spectrum[:,i] / std[i]) # may need to include the Fourier power later
-	# weights[:, i] = 1 / (err_power_spectrum[:, i] / std[i])
-# for i in range(X.shape[1]):
-# 	X_new[:,i] = X[:,i] - mean[i]
+	for i in range(X.shape[1]):
+		mean[i] = np.average(X[:,i], weights=weights[:,i])
+		std[i] 	= np.average((X[:,i]-mean[i])**2, weights=weights[:,i])**0.5
+
+	for i in range(X.shape[1]):
+		if nor == True:
+			X_new[:,i] 		= (X[:,i] - mean[i]) / std[i]
+			weights[:,i]	= weights[:,i] * std[i] 	# may need to include the Fourier power later
+		else:
+			X_new[:,i] = X[:,i] - mean[i]
+
+	if n_pca==None:
+		n_pca = X.shape[1]
+
+	# Compute the PCA vectors & variance
+	pca 		= WPCA(n_components=n_pca).fit(X_new, **kwds)
+	# pca = WPCA(n_components=n_pca).fit(X_new)
+	pca_score 	= pca.transform(X_new, **kwds)
+	P 			= pca.components_
+	# Y 			= WPCA(n_components=n_pca).fit_reconstruct(X, **kwds)
+
+	# The following computes the errorbars
+	# The transpose is only intended to be consistent with the matrix format from Ludovic's paper
+	X_wpca 	= X_new.T
+	C 		= np.zeros(X_wpca.shape)
+	err_C 	= np.zeros(X_wpca.shape)
+
+	W 		= weights.T
+	P 		= P.T
+
+	for i in range(X_wpca.shape[1]):
+		w = np.diag(W[:, i]) ** 2
+		C[:, i] = np.linalg.inv(P.T @ w @ P) @ (P.T @ w @ X_wpca[:, i])
+
+		# the error is described by a covariance matrix of C
+		Cov_C = np.linalg.inv(P.T @ w @ P)
+
+		# inv(P'*w*P) * P' * w * cov(X(:,i)) * w * P * inv(P'*w*P)
+		# Cov_C2 = np.linalg.inv(P.T @ w @ P) @ P.T @ w @ np.diag(X_err) @ w @ P @ np.linalg.inv(P.T @ w @ P)
+		# diag_C2 = np.diag(Cov_C2)
+
+		diag_C = np.diag(Cov_C)
+		# print(i)
+		err_C[:, i] = diag_C ** 0.5
+
+	P 				= pca.components_
+	# pca_score 		= C.T # or pca_score
+	err_pca_score 	= err_C.T
+
+	#---------#
+	# results #
+	#---------#
+	cumulative_variance_explained = np.cumsum(
+		pca.explained_variance_ratio_) * 100  # look again the difference calculated from the other way
+	print('Cumulative variance explained vs PCA components')
+	for i in range(len(cumulative_variance_explained)):
+		print(i+1, '\t', '{:.3f}'.format(cumulative_variance_explained[i]))
+
+	for i in range(len(cumulative_variance_explained)):
+		if cumulative_variance_explained[i] < 90:
+			n_pca = i
+	n_pca += 2
+	if cumulative_variance_explained[0] > 90:
+		n_pca = 1
+
+	print('{:d} pca scores account for {:.2f}% variance explained'.format(n_pca,
+			cumulative_variance_explained[n_pca - 1]))
+
+	print('std(C) and midean(err_C) are\n',
+		  np.around(np.std(C[0:n_pca, :], axis=1), decimals=1), '\n',
+		  np.around(np.median(err_C[0:n_pca, :], axis=1), decimals=1))
+
+	return P, pca_score, err_pca_score
 
 
-n_pca = X.shape[1]
-# n_pca = 2
-# Compute the PCA vectors & variance
-pca = WPCA(n_components=n_pca)
+my_P, my_pca_score, my_err_pca_score = my_pca(X=shift_function, X_err=err_shift_spectrum, nor=False)
 
-pca.fit(X_new, **kwds)
-pca_score = pca.transform(X_new, **kwds)
-# print(pca_score.shape)  # (632, 17)
-P = pca.components_  # (12, 17)
-# print(P.shape)
+my_pca_score1=my_pca_score
+my_err_pca_score1 = my_err_pca_score
+my_pca_score2=my_pca_score
+my_err_pca_score2 = my_err_pca_score
 
-X_wpca = X_new.T
-X_wpca.shape  # (17, 632)
+plt.rcParams.update({'font.size': 12})
+N = my_pca_score2.shape[1]
+plt.subplots(figsize=(12, N))
 
-C = np.zeros((X.shape[1], X.shape[0]))
-err_C = np.zeros(C.shape)
+for i in range(N):
+	ax = plt.subplot(N, 1, i+1)
+	if i == 0:
+		plt.title('PCA scores')
+	plt.plot(bjd_daily, pca_score[:,i], '.', alpha=0.2)
+	plt.plot(bjd_daily, pca_score3[:,i], '.', alpha=0.2)
+	plt.ylabel(str(i+1))
+	if i != N-1:
+		ax.set_xticks([])
+	else:
+		plt.xlabel('date_bjd')
+plt.savefig('pca_score_comparison4.png')
+plt.show()
 
-W = weights.T
 
-P = pca.components_.T
-# P.shape  # (17, 12)
 
-for i in range(X_wpca.shape[1]):
-	w = np.diag(W[:, i]) ** 2
-	C[:, i] = np.linalg.inv(P.T @ w @ P) @ (P.T @ w @ X_wpca[:, i])
+pca_score = np.loadtxt('pca_score.txt', delimiter=',')
+pca_score2 = np.loadtxt('pca_score2.txt', delimiter=',')
+pca_score3 = np.loadtxt('pca_score3.txt', delimiter=',')
 
-	# the error is discribed by a covariance matrix of C
-	Cov_C = np.linalg.inv(P.T @ w @ P)
+time_series(x=bjd_daily, y=my_pca_score, dy=my_err_pca_score,
+			ylabel='PCA',
+			title='my_pca_score time series',
+			file_name='FIESTA_my_pca_score_time_series.png')
+			# title='pca_score time series',
+			# file_name='pca_score_time_series.png')
 
-	# inv(P'*w*P) * P' * w * cov(X(:,i)) * w * P * inv(P'*w*P)
-	# Cov_C = np.linalg.inv(P.T @ w @ P) @ P.T @ w @ np.diag(err_shift_spectrum[i,:])**2 @ w @ P @ np.linalg.inv(P.T @ w @ P)
+time_series(x=bjd_daily, y=C.T, dy=err_C.T*0, N=n_pca,
+			ylabel='PCA',
+			title='C time series',
+			file_name='FIESTA_C_time_series.png')
 
-	diag_C = np.diag(Cov_C)
-	err_C[:, i] = diag_C ** 0.5
+time_series(x=np.arange(11), y=P, dy=np.zeros(P.shape),
+			ylabel='PCA',
+			title='my_pca_score time series',
+			file_name='FIESTA_P_time_series.png')
+# my_pca_score is consistent with the C calculated below
+
+# now not working with the WPCA(n_components=n_pca).fit(X_new, **kwds)
+
+
+
+
 
 
 # determine how many pca scores are needed
 
-cumulative_variance_explained = np.cumsum(pca.explained_variance_ratio_) * 100 # look again the difference calculated from the other way
-print(cumulative_variance_explained)
 
-for i in range(len(cumulative_variance_explained)):
-	if cumulative_variance_explained[i] < 90:
-		n_pca = i
-n_pca += 2
-if cumulative_variance_explained[0]>90:
-	n_pca = 1
-
-print('{:d} pca scores account for {:.2f}% variance explained'.format(n_pca, cumulative_variance_explained[n_pca-1]))
-
-print('std(C) and midean(err_C) are\n',
-	np.around(np.std(C[0:n_pca,:], axis=1), decimals=1), '\n',
-	np.around(np.median(err_C[0:n_pca,:], axis=1), decimals=1))
 
 for i in range(n_pca):
 	np.savetxt('C' + str(i+1) + '.txt', C[i,:])
@@ -1163,6 +1241,20 @@ if 0:
 #----------------------------------
 # run mcmc on X
 #----------------------------------
+P, pca_score = WPCA_results(X=shift_function, weights=1/err_shift_spectrum)
+P2, pca_score2 = WPCA_results2(X=shift_function, weights=1/err_shift_spectrum)
+
+time_series(x=bjd_daily, y=pca_score, dy=err_C.T, N=n_pca,
+			ylabel='PCA',
+			title='pca_score time series',
+			file_name='FIESTA_pca_score_time_series.png')
+
+time_series(x=bjd_daily, y=pca_score2, dy=err_C.T, N=n_pca,
+			ylabel='PCA',
+			title='pca_score2 time series',
+			file_name='FIESTA_pca_score2_time_series.png')
+
+
 
 # get the PCA components and scores
 def WPCA_results(X, weights=None, ncomp=None):
@@ -1188,25 +1280,25 @@ def WPCA_results(X, weights=None, ncomp=None):
 	return P, pca_score
 
 
-def WPCA_results2(X, weights=None, ncomp=None):
-
-	if weights is None:
-	    kwds = {}
-	else:
-	    kwds = {'weights': weights}
-
-	if ncomp is None:
-		ncomp = X.shape[1]
-
-	X_new = np.zeros(X.shape)
-
-	for i in range(X.shape[1]):
-		X_new[:,i] = X[:,i] - np.average(X[:,i], weights=weights[:,i])
-
-	pca_score = pca.transform(X_new, **kwds)
-	P = pca.components_
-
-	return P, pca_score
+# def WPCA_results2(X, weights=None, ncomp=None):
+# 
+# 	if weights is None:
+# 	    kwds = {}
+# 	else:
+# 	    kwds = {'weights': weights}
+# 
+# 	if ncomp is None:
+# 		ncomp = X.shape[1]
+# 
+# 	X_new = np.zeros(X.shape)
+# 
+# 	for i in range(X.shape[1]):
+# 		X_new[:,i] = X[:,i] - np.average(X[:,i], weights=weights[:,i])
+# 
+# 	pca_score = pca.transform(X_new, **kwds)
+# 	P = pca.components_
+# 
+# 	return P, pca_score
 
 
 
@@ -1290,6 +1382,12 @@ plt.savefig('C.png')
 # plt.savefig('Compare_errors2.png')
 plt.show()
 
+# or
+time_series(x=bjd_daily, y=C.T, dy=err_C.T, N=n_pca,
+			ylabel='PCA',
+			title=r'$\Delta RV$ PCA time series',
+			file_name='FIESTA_shift_PCA_time_series.png')
+
 
 # plt.plot(np.mean(eCCF_daily, axis=0), err_score_mcmc[:, 0], '.')
 # plt.show()
@@ -1299,7 +1397,7 @@ plt.show()
 #----------------------------------
 periodogram(x=bjd_daily, y=C.T, dy=err_C.T, N=n_pca,
 			plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=365/2,
-			title='Shift PCA Periodogram',
+			title=r'$\Delta RV$ PCA Periodogram',
 			file_name='FIESTA_shift_PCA_periodogram.png')
 
 

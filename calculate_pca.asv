@@ -1,0 +1,8 @@
+X = dlmread('X.txt');
+W = dlmread('W.txt');
+ncomp = 11;
+niter = 5;
+nrefine = 2;
+xi = 1;
+
+[P, C] = WPCA(X, W, ncomp, niter, nrefine, xi);

@@ -1,11 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="c72ade28-4bdf-493d-beab-eec2bb93de73" name="Default Changelist" comment="" />
+    <list default="true" id="c72ade28-4bdf-493d-beab-eec2bb93de73" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/FIESTA-HARPS-N.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/FIESTA-HARPS-N.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HARPS-N.py" beforeDir="false" afterPath="$PROJECT_DIR$/HARPS-N.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/calculate_pca.asv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/calculate_pca.m" beforeDir="false" afterPath="$PROJECT_DIR$/calculate_pca.m" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FlaskConsoleOptions" custom-start-script="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))">
+    <envs>
+      <env key="FLASK_APP" value="app" />
+    </envs>
+    <option name="myCustomStartScript" value="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))" />
+    <option name="myEnvs">
+      <map>
+        <entry key="FLASK_APP" value="app" />
+      </map>
+    </option>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -28,6 +45,7 @@
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="settings.editor.selected.configurable" value="configurable.group.project" />
   </component>
   <component name="RunManager">
     <configuration default="true" type="PythonConfigurationType" factoryName="Python">
@@ -63,6 +81,12 @@
       <updated>1616763547895</updated>
       <workItem from="1616763553033" duration="41228000" />
       <workItem from="1617756531027" duration="40284000" />
+      <workItem from="1618199174486" duration="3457000" />
+      <workItem from="1618261569719" duration="60000" />
+      <workItem from="1621306289326" duration="11338000" />
+      <workItem from="1623635318154" duration="502000" />
+      <workItem from="1624891531194" duration="1174000" />
+      <workItem from="1628189375546" duration="24188000" />
     </task>
     <servers />
   </component>
@@ -74,7 +98,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/HARPS-N.py</url>
-          <line>621</line>
+          <line>648</line>
           <option name="timeStamp" value="2" />
         </line-breakpoint>
       </breakpoints>

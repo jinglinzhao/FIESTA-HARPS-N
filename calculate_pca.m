@@ -1,11 +1,11 @@
 X       = dlmread('X.txt')';
 X_err   = dlmread('X_err.txt')';
 
-% W       = 1 ./ X_err;
+W       = 1 ./ X_err;
 % W(7,:) = W(7,:)/100;
-W = ones(size(W));
+% W = ones(size(W));
 
-ncomp = 11;
+ncomp = 3;
 niter = 2000;
 nrefine = 2000;
 xi = 0;

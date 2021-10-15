@@ -385,13 +385,16 @@ efwhm_daily = efwhm_daily[~idx_0]
 #----------------------------------
 
 # The following are tests regarding part 2
-if 0: 
-	plt.plot(V_grid, CCF_daily)
-	plt.xlabel('V_grid')
-	plt.ylabel('normalised_flux')
-	plt.savefig('normalised_ccf.png')
-	plt.show()
+ 
+idx_ccf = (V_grid<=15.58) & (V_grid>-16.40)
+plt.plot(V_grid[idx_ccf], 1-CCF_daily[idx_ccf,:])
+plt.title('CCF (overplotted)')
+plt.xlabel('V grid [km/s]')
+plt.ylabel('Normalised flux')
+plt.savefig('CCF.png')
+plt.show()
 
+if 0:
 	for i in range(len(bjd_daily)):
 		plt.plot(V_grid, CCF_daily[:,i]-CCF_daily[:,0], alpha=0.1)
 	plt.xlabel('V_grid')
@@ -703,7 +706,8 @@ if 0:
 
 
 out = 11
-shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, out=out, template=[])
+df, shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
+# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF, eCCF)
 # shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily[:,0:20], eCCF_daily[:,0:20], template=[])
 # shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, out=out, template=[], Normality_test=True)
 # shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, template=[])
@@ -713,8 +717,8 @@ err_shift_spectrum 	*= 1000
 RV_gauss 			*= 1000
 
 shift_function = np.zeros(shift_spectrum.shape)
-for i in range(shift_spectrum.shape[1]):
-	shift_function[:,i] = shift_spectrum[:,i] - rv_raw_daily
+for i in range(shift_spectrum.shape[0]):
+	shift_function[i,:] = shift_spectrum[i,:] - rv_raw_daily
 
 # test the weighted averaged shift
 rv_test = np.zeros(shift_spectrum.shape[0])
@@ -735,15 +739,17 @@ colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
 
 fig, axes = plt.subplots(figsize=(15, 3))
 plt.gcf().subplots_adjust(bottom=0.2)
-plt.errorbar(bjd, rv-np.mean(rv_daily), rv_err, marker='.', ls='none', alpha= 0.1, label='Unbinned RV')
-plt.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, marker='o', ls='none', alpha= 0.5, label='Daily RV')
+plt.errorbar(bjd, rv-np.mean(rv_daily), rv_err, c='black', marker='.', ls='none', alpha= 0.05, label='Unbinned RV')
+plt.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, c='purple', marker='o', ls='none', alpha= 0.5, label='Daily RV')
 # plt.plot(bjd_int, rv_daily_int-np.mean(rv_daily), '.')
-plt.title('HARPS-N three years solar RV')
+# plt.title('HARPS-N three years solar RV')
 plt.legend()
 plt.xlabel('BJD - 2400000 [d]')
 plt.ylabel('RV [m/s]')
 plt.savefig('rv_daily.png')
 plt.show()
+
+
 
 from astropy.timeseries import LombScargle
 from scipy.signal import find_peaks
@@ -1054,6 +1060,169 @@ periodogram(x=bjd_daily, y=shift_function, dy=err_shift_spectrum, N=None,
 			file_name='FIESTA_shift_periodogram.png')
 
 
+
+
+
+#----------------------------
+# New time-series
+#----------------------------
+from sklearn.linear_model import LinearRegression
+k_mode 	= 11
+alpha1, alpha2 = [0.5,0.2]
+widths 	= [8,1]
+heights = [1,1,1,1,1,1,1,1,1,1,1,1]
+gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
+plt.rcParams.update({'font.size': 10})
+fig6, f6_axes = plt.subplots(figsize=(10, k_mode+1), ncols=2, nrows=k_mode+1, constrained_layout=True,
+                             gridspec_kw=gs_kw)
+for r, row in enumerate(f6_axes):
+	for c, ax in enumerate(row):		
+		if c==0:
+			if r==0:
+				ax.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, marker='.', color='black', ls='none', alpha=alpha1)
+				ax.set_title('Time-series')
+				ax.set_ylabel('$RV_{HARPS}$')
+			else:				
+				ax.errorbar(bjd_daily, shift_function[r-1,:], err_shift_spectrum[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
+				ax.set_ylabel(r'$\Delta$RV$_{%d}$' %(r))
+			if r!=k_mode:
+				ax.set_xticks([])
+			else:
+				ax.set_xlabel('BJD - 2400000 [d]')
+		if c==1:
+			if r==0:
+				reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
+				score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
+				ax.set_title('score = {:.2f}'.format(score))
+				ax.plot(rv_daily-np.mean(rv_daily), rv_daily-np.mean(rv_daily), 'k.', alpha = alpha2)				
+			if r>0:
+				reg = LinearRegression().fit(rv_daily.reshape(-1, 1), shift_function[r-1,:].reshape(-1, 1))
+				score = reg.score(rv_daily.reshape(-1, 1), shift_function[r-1,:].reshape(-1, 1))
+				ax.set_title('score = {:.2f}'.format(score))
+				ax.plot(rv_daily-np.mean(rv_daily), shift_function[r-1,:], 'k.', alpha = alpha2)
+			if r!=k_mode:
+				ax.set_xticks([])
+			else:
+				ax.set_xlabel('$RV_{HARPS}$')
+			ax.yaxis.tick_right()
+plt.savefig('time-series_and_shift_correlation.png')			
+plt.show()
+
+
+
+from sklearn.linear_model import LinearRegression
+k_mode 	= 11
+alpha1, alpha2 = [0.5,0.2]
+widths 	= [8,1]
+heights = [1,1,1,1,1,1,1,1,1,1,1,1]
+gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
+plt.rcParams.update({'font.size': 10})
+fig6, f6_axes = plt.subplots(figsize=(10, k_mode+1), ncols=2, nrows=k_mode+1, constrained_layout=True,
+                             gridspec_kw=gs_kw)
+for r, row in enumerate(f6_axes):
+	for c, ax in enumerate(row):		
+		if c==0:
+			if r==0:
+				ax.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, marker='.', color='black', ls='none', alpha=alpha1)
+				ax.set_title('Time-series')
+				ax.set_ylabel('$RV_{HARPS}$')
+			else:				
+				ax.errorbar(bjd_daily, power_spectrum[r-1,:], err_power_spectrum[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
+				ax.set_ylabel(r'$A_{%d}$' %(r))
+			if r!=k_mode:
+				ax.set_xticks([])
+			else:
+				ax.set_xlabel('BJD - 2400000 [d]')
+		if c==1:
+			if r==0:
+				reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
+				score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
+				ax.set_title('score = {:.2f}'.format(score))
+				ax.plot(rv_daily-np.mean(rv_daily), rv_daily-np.mean(rv_daily), 'k.', alpha = alpha2)				
+			if r>0:
+				reg = LinearRegression().fit(rv_daily.reshape(-1, 1), power_spectrum[r-1,:].reshape(-1, 1))
+				score = reg.score(rv_daily.reshape(-1, 1), power_spectrum[r-1,:].reshape(-1, 1))
+				ax.set_title('score = {:.2f}'.format(score))
+				ax.plot(rv_daily-np.mean(rv_daily), power_spectrum[r-1,:], 'k.', alpha = alpha2)
+			if r!=k_mode:
+				ax.set_xticks([])
+			else:
+				ax.set_xlabel('$RV_{HARPS}$')
+			ax.yaxis.tick_right()
+plt.savefig('time-series_and_A_correlation.png')			
+plt.show()
+
+
+
+def periodogram(x, y, dy, N=None,
+				plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=None,
+				ylabel=None,
+				title = 'Periodogram',
+				file_name='Periodogram.png'):
+	
+	from scipy.signal import find_peaks
+	from astropy.timeseries import LombScargle
+
+	if N==None:
+		N = y.shape[1]
+	time_span = (max(x) - min(x))
+	min_f   = 1/time_span
+
+	plt.subplots(figsize=(10, N))
+
+	for i in range(N):
+		ax = plt.subplot(N,1,i+1)
+		if i == 0:
+			plt.title(title)
+
+		frequency, power = LombScargle(x, y[:, i], dy[:, i]).autopower(minimum_frequency=min_f,
+													   maximum_frequency=max_f,
+													   samples_per_peak=spp)
+
+		plot_x = 1/frequency
+		idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
+		height = max(power[idxx])*0.4
+		plt.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
+		peaks, _ = find_peaks(power[idxx], height=height)
+		plt.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
+		if xc != None:
+			plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.5)
+
+		for n in range(len(plot_x[idxx][peaks])):
+			plt.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
+
+		plt.xlim([plot_min_t,time_span/2])
+		plt.ylim([0, 3*height])
+		plt.xscale('log')
+		if i==0:
+			plt.ylabel('HARPS-N')
+		if i>0:
+			plt.ylabel(ylabel+str(i))
+
+		if i != N-1:
+			ax.set_xticks([])
+		else:
+			plt.xlabel('Period [days]')
+
+	plt.savefig(file_name)
+	plt.show()
+
+
+periodogram(x=bjd_daily, y=np.vstack((rv_daily, power_spectrum)).T, dy=np.vstack((erv_daily, err_power_spectrum)).T,
+			plot_min_t=2, study_min_t=5, max_f=1, spp=100,
+			ylabel='k=',
+			file_name='FIESTA_amplitude_periodogram.png')
+
+periodogram(x=bjd_daily, y=np.vstack((rv_daily, shift_function)).T, dy=np.vstack((erv_daily, err_shift_spectrum)).T,
+			plot_min_t=2, study_min_t=5, max_f=1, spp=100,
+			ylabel='k=',
+			file_name='FIESTA_shift_periodogram.png')
+
+
+
+
+
+
 # CCF_daily = CCF_daily[:, 0::5]
 # eCCF_daily = eCCF_daily[:, 0::5]
 
@@ -1290,32 +1459,89 @@ def my_pca(X=shift_function, X_err=err_shift_spectrum, n_pca=None, nor=False):
 	return P, pca_score, err_pca_score
 
 
-my_P, my_pca_score, my_err_pca_score = my_pca(X=shift_function, X_err=err_shift_spectrum, nor=True)
+my_P, my_pca_score, my_err_pca_score = my_pca(X=shift_function.T, X_err=err_shift_spectrum.T, nor=True)
 
 time_series(x=bjd_daily, y=my_pca_score, dy=my_err_pca_score, N =6,
 			ylabel='PCA',
 			title=r'$\Delta RV_k$ PCA Scores Time Series',
 			file_name='FIESTA_RV_my_pca_score_time_series.png')
 
+
+k_mode 	= 6
+alpha1, alpha2 = [0.5,0.2]
+widths 	= [8,1]
+heights = [1,1,1,1,1,1,1]
+gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
+plt.rcParams.update({'font.size': 10})
+fig6, f6_axes = plt.subplots(figsize=(10, k_mode+1), ncols=2, nrows=k_mode+1, constrained_layout=True,
+                             gridspec_kw=gs_kw)
+for r, row in enumerate(f6_axes):
+	for c, ax in enumerate(row):		
+		if c==0:
+			if r==0:
+				ax.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, marker='.', color='black', ls='none', alpha=alpha1)
+				ax.set_title('Time-series')
+				ax.set_ylabel('$RV_{HARPS}$')
+			else:				
+				ax.errorbar(bjd_daily, my_pca_score.T[r-1,:], my_err_pca_score.T[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
+				ax.set_ylabel('PCA%d' %(r))
+			if r!=k_mode:
+				ax.set_xticks([])
+			else:
+				ax.set_xlabel('BJD - 2400000 [d]')
+		if c==1:
+			if r==0:
+				reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
+				score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
+				ax.set_title('score = {:.2f}'.format(score))
+				ax.plot(rv_daily-np.mean(rv_daily), rv_daily-np.mean(rv_daily), 'k.', alpha = alpha2)				
+			if r>0:
+				reg = LinearRegression().fit(rv_daily.reshape(-1, 1), my_pca_score.T[r-1,:].reshape(-1, 1))
+				score = reg.score(rv_daily.reshape(-1, 1), my_pca_score.T[r-1,:].reshape(-1, 1))
+				ax.set_title('score = {:.2f}'.format(score))
+				ax.plot(rv_daily-np.mean(rv_daily), my_pca_score.T[r-1,:], 'k.', alpha = alpha2)
+			if r!=k_mode:
+				ax.set_xticks([])
+			else:
+				ax.set_xlabel('$RV_{HARPS}$')
+			ax.yaxis.tick_right()
+# plt.savefig('time-series_and_PCA_shift_correlation.png')
+plt.savefig('time-series_and_PCA_A_correlation.png')			
+plt.show()
+
+periodogram(x=bjd_daily, y=np.vstack((rv_daily, my_pca_score.T)).T, dy=np.vstack((erv_daily, my_err_pca_score.T)).T, N=7,
+			plot_min_t=2, study_min_t=5, max_f=1, spp=100, xc=365/2,
+			ylabel='PCA',
+			title=r'$\Delta RV_k$ PCA Scores Periodogram',
+			file_name='FIESTA_RV_PCA_periodogram.png')
+
+'''
 periodogram(x=bjd_daily, y=my_pca_score, dy=my_err_pca_score, N=6,
 			plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=365/2,
 			ylabel='PCA',
 			title=r'$\Delta RV_k$ PCA Scores Periodogram',
 			file_name='FIESTA_RV_PCA_periodogram.png')
+'''
 
-my_P, my_pca_score, my_err_pca_score = my_pca(X=power_spectrum, X_err=err_power_spectrum, nor=True)
+my_P, my_pca_score, my_err_pca_score = my_pca(X=power_spectrum.T, X_err=err_power_spectrum.T, nor=True)
 
 time_series(x=bjd_daily, y=my_pca_score, dy=my_err_pca_score, N =6,
 			ylabel='PCA',
 			title=r'$A_k$ PCA Scores Time Series',
 			file_name='FIESTA_amplitudes_my_pca_score_time_series.png')
 
+periodogram(x=bjd_daily, y=np.vstack((rv_daily, my_pca_score.T)).T, dy=np.vstack((erv_daily, my_err_pca_score.T)).T, N=7,
+			plot_min_t=2, study_min_t=5, max_f=1, spp=100, xc=365/2,
+			ylabel='PCA',
+			title='$A_k$ PCA Scores Periodogram',
+			file_name='FIESTA_amplitude_PCA_periodogram.png')
+'''
 periodogram(x=bjd_daily, y=my_pca_score, dy=my_err_pca_score, N=6,
 			plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=365/2,
 			ylabel='PCA',
 			title='$A_k$ PCA Scores Periodogram',
 			file_name='FIESTA_amplitude_PCA_periodogram.png')
-
+'''
 
 my_pca_score1=my_pca_score
 my_err_pca_score1 = my_err_pca_score

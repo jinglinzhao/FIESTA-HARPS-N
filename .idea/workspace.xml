@@ -2,11 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="c72ade28-4bdf-493d-beab-eec2bb93de73" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/FIESTA-HARPS-N.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/FIESTA-HARPS-N.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/HARPS-N.py" beforeDir="false" afterPath="$PROJECT_DIR$/HARPS-N.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/calculate_pca.asv" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/calculate_pca.m" beforeDir="false" afterPath="$PROJECT_DIR$/calculate_pca.m" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flux_residual.py" beforeDir="false" afterPath="$PROJECT_DIR$/flux_residual.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -87,6 +84,7 @@
       <workItem from="1623635318154" duration="502000" />
       <workItem from="1624891531194" duration="1174000" />
       <workItem from="1628189375546" duration="24188000" />
+      <workItem from="1633657037341" duration="21000" />
     </task>
     <servers />
   </component>

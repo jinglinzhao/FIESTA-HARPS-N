@@ -74,7 +74,7 @@ plt.savefig('Flux_residual.png')
 plt.show()
 
 
-k_max = 7
+k_max = 6
 
 plt.subplots(figsize=(10, k_max))
 

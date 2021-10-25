@@ -705,20 +705,441 @@ if 0:
 			# 	print('%.3f: %.3f, data does not look normal (reject H0)' % (sl, cv))
 
 
-out = 11
-df, shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
-# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF, eCCF)
-# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily[:,0:20], eCCF_daily[:,0:20], template=[])
-# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, out=out, template=[], Normality_test=True)
-# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, template=[])
-# Convertion from km/s to m/s
-shift_spectrum 		*= 1000
-err_shift_spectrum 	*= 1000
-RV_gauss 			*= 1000
 
-shift_function = np.zeros(shift_spectrum.shape)
-for i in range(shift_spectrum.shape[0]):
-	shift_function[i,:] = shift_spectrum[i,:] - rv_raw_daily
+#----------------------------------
+# Important functions 
+#----------------------------------
+def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind_yalbel, file_name):
+
+	'''
+	e.g. 
+		k_mode 		= 11
+		t 			= bjd_daily
+		rv 			= rv_daily
+		erv 		= erv_daily
+		ind 		= shift_function
+		eind 	 	= err_shift_spectrum
+		ts_xlabel 	= 'BJD - 2400000 [d]'
+		rv_xlabel 	= '$RV_{HARPS}$'
+		pe_xlabel 	= 'Period [days]'
+		ind_yalbel	= 'A'
+		file_name 	= 'time-series_and_shift_correlation.png'
+
+	'''
+
+	def new_periodogram(x, y, dy,
+					plot_min_t=2, max_f=1, spp=100):
+		
+		from scipy.signal import find_peaks
+		from astropy.timeseries import LombScargle
+
+		time_span = (max(x) - min(x))
+		min_f   = 1/time_span
+
+		frequency, power = LombScargle(x, y, dy).autopower(minimum_frequency=min_f,
+													   maximum_frequency=max_f,
+													   samples_per_peak=spp)
+
+		plot_x = 1/frequency
+		idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
+		height = max(power[idxx])*0.4
+		ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
+		peaks, _ = find_peaks(power[idxx], height=height)
+		ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
+
+		for n in range(len(plot_x[idxx][peaks])):
+			ax.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
+
+		ax.set_xlim([plot_min_t,time_span/2])
+		ax.set_ylim([0, 3*height])
+		ax.set_xscale('log')
+
+	from sklearn.linear_model import LinearRegression
+
+	# set up the plotting configureations
+	alpha1, alpha2 = [0.5,0.2]
+	widths 	= [7,1,7]
+	heights = [1]*(k_mode+1)
+	gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
+	plt.rcParams.update({'font.size': 12})
+	fig6, f6_axes = plt.subplots(figsize=(16, k_mode+1), ncols=3, nrows=k_mode+1, constrained_layout=True,
+	                             gridspec_kw=gs_kw)
+
+	# plots 
+	for r, row in enumerate(f6_axes):
+		for c, ax in enumerate(row):	
+
+			# time-series 
+			if c==0:
+				if r==0:
+					ax.errorbar(t, rv-np.mean(rv), erv, marker='.', color='black', ls='none', alpha=alpha1)
+					ax.set_title('Time-series')
+					ax.set_ylabel(rv_xlabel)
+				else:				
+					ax.errorbar(t, ind[r-1,:], eind[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
+					ax.set_ylabel(ind_yalbel+str(r))
+				if r!=k_mode:
+					ax.set_xticks([])
+				else:
+					ax.set_xlabel(ts_xlabel)
+
+			if c==1:
+				if r==0:
+					reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
+					score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
+					ax.set_title('score = {:.2f}'.format(score))
+					ax.plot(rv-np.mean(rv), rv-np.mean(rv), 'k.', alpha = alpha2)				
+				if r>0:
+					reg = LinearRegression().fit(rv.reshape(-1, 1), ind[r-1,:].reshape(-1, 1))
+					score = reg.score(rv.reshape(-1, 1), ind[r-1,:].reshape(-1, 1))
+					ax.set_title('score = {:.2f}'.format(score))
+					ax.plot(rv-np.mean(rv), ind[r-1,:], 'k.', alpha = alpha2)
+				if r!=k_mode:
+					ax.set_xticks([])
+				else:
+					ax.set_xlabel(rv_xlabel)
+				ax.yaxis.tick_right()
+
+			if c==2:
+				if r==0:
+					new_periodogram(t, rv, erv)
+					ax.set_title('Periodogram')
+				if r>0:
+					new_periodogram(t, ind[r-1,:], eind[r-1,:])
+				if r!=k_mode:
+					ax.set_xticks([])
+				if r==k_mode:
+					ax.set_xlabel(pe_xlabel)
+
+	plt.savefig(file_name)
+
+
+def my_pca(X, X_err, n_pca=None, nor=False):
+	'''
+	X.shape 	= (n_samples, n_features)
+	X_err.shape = (n_samples, n_features)
+	nor: normalization = True / False
+	'''
+	from wpca import WPCA
+
+	# X_err[:, 6] *= 1
+	weights = 1/X_err
+	# weights = np.ones(weights.shape)
+	# weights[:, 0] = weights[:, 0] / 100
+	kwds 	= {'weights': weights}
+
+	# subtract the weighted mean for each measurement type (dimension) of X
+	X_new 	= np.zeros(X.shape)
+	mean 	= np.zeros(X.shape[1])
+	std 	= np.zeros(X.shape[1])
+
+	for i in range(X.shape[1]):
+		mean[i] = np.average(X[:,i], weights=weights[:,i])
+		std[i] 	= np.average((X[:,i]-mean[i])**2, weights=weights[:,i])**0.5
+
+	for i in range(X.shape[1]):
+		if nor == True:
+			X_new[:,i] 		= (X[:,i] - mean[i]) / std[i]
+			weights[:,i]	= weights[:,i] * std[i] 	# may need to include the Fourier power later
+			# weights[:,i]	= weights[:,i] * power_spectrum.T[:,i] * std[i] 	# may need to include the Fourier power later
+		else:
+			X_new[:,i] = X[:,i] - mean[i]
+
+	if n_pca==None:
+		n_pca = X.shape[1]
+
+	# Compute the PCA vectors & variance
+	pca 		= WPCA(n_components=n_pca).fit(X_new, **kwds)
+	# pca = WPCA(n_components=n_pca).fit(X_new)
+	pca_score 	= pca.transform(X_new, **kwds)
+	P 			= pca.components_
+	# Y 			= WPCA(n_components=n_pca).fit_reconstruct(X, **kwds)
+
+	# The following computes the errorbars
+	# The transpose is only intended to be consistent with the matrix format from Ludovic's paper
+	X_wpca 	= X_new.T
+	C 		= np.zeros(X_wpca.shape)
+	err_C 	= np.zeros(X_wpca.shape)
+
+	W 		= weights.T
+	P 		= P.T
+
+	for i in range(X_wpca.shape[1]):
+		w = np.diag(W[:, i]) ** 2
+		C[:, i] = np.linalg.inv(P.T @ w @ P) @ (P.T @ w @ X_wpca[:, i])
+
+		# the error is described by a covariance matrix of C
+		Cov_C = np.linalg.inv(P.T @ w @ P)
+
+		# inv(P'*w*P) * P' * w * cov(X(:,i)) * w * P * inv(P'*w*P)
+		# Cov_C2 = np.linalg.inv(P.T @ w @ P) @ P.T @ w @ np.diag(X_err) @ w @ P @ np.linalg.inv(P.T @ w @ P)
+		# diag_C2 = np.diag(Cov_C2)
+
+		diag_C = np.diag(Cov_C)
+		# print(i)
+		err_C[:, i] = diag_C ** 0.5
+
+	P 				= pca.components_
+	# pca_score 		= C.T # or pca_score
+	err_pca_score 	= err_C.T
+
+	#---------#
+	# results #
+	#---------#
+	cumulative_variance_explained = np.cumsum(
+		pca.explained_variance_ratio_) * 100  # look again the difference calculated from the other way
+	print('Cumulative variance explained vs PCA components')
+	for i in range(len(cumulative_variance_explained)):
+		print(i+1, '\t', '{:.3f}'.format(cumulative_variance_explained[i]))
+
+	for i in range(len(cumulative_variance_explained)):
+		if cumulative_variance_explained[i] < 89.5:
+			n_pca = i
+	n_pca += 2
+	if cumulative_variance_explained[0] > 89.5:
+		n_pca = 1
+
+	print('{:d} pca scores account for {:.2f}% variance explained'.format(n_pca,
+			cumulative_variance_explained[n_pca - 1]))
+
+	print('std(C) and midean(err_C) are\n',
+		  np.around(np.std(C[0:n_pca, :], axis=1), decimals=1), '\n',
+		  np.around(np.median(err_C[0:n_pca, :], axis=1), decimals=1))
+
+	return P, pca_score, err_pca_score, n_pca
+
+
+#----------------------------------
+# testing GP for filtering 
+#----------------------------------
+import george
+from george import kernels
+x 		= bjd_daily
+y 		= shift_function[0,:]
+yerr 	= err_shift_spectrum[0,:]
+kernel 	= np.var(y) * kernels.Matern52Kernel(100**2)
+gp 		= george.GP(kernel)
+gp.compute(x, yerr)
+
+x_pred = np.linspace(min(x), max(x), 1000)
+pred, pred_var = gp.predict(y, x_pred, return_var=True)
+
+plt.fill_between(x_pred, pred - np.sqrt(pred_var), pred + np.sqrt(pred_var),
+                color="k", alpha=0.2)
+plt.plot(x_pred, pred, "k", lw=1.5, alpha=0.5)
+plt.errorbar(x, y, yerr=yerr, fmt=".k", capsize=0)
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
+
+# residual
+y_pred, y_pred_var = gp.predict(y, x, return_var=True)
+plt.errorbar(x, y_pred-y, yerr=yerr, fmt=".k", capsize=0)
+plt.show()
+
+
+
+std_matrix = np.zeros(15)
+for k_max in (np.arange(15)+5):
+	df, shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, k_max=k_max)
+	# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF, eCCF)
+	# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily[:,0:20], eCCF_daily[:,0:20], template=[])
+	# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, out=out, template=[], Normality_test=True)
+	# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, template=[])
+	# Convertion from km/s to m/s
+	shift_spectrum 		*= 1000
+	err_shift_spectrum 	*= 1000
+	RV_gauss 			*= 1000
+
+	shift_function 	= np.zeros(shift_spectrum.shape)
+	short_variation = np.zeros(shift_spectrum.shape)
+	long_variation 	= np.zeros(shift_spectrum.shape)
+	for i in range(shift_spectrum.shape[0]):
+		shift_function[i,:] = shift_spectrum[i,:] - rv_raw_daily
+
+		x 		= bjd_daily
+		y 		= shift_function[i,:]
+		yerr 	= err_shift_spectrum[i,:]
+		kernel 	= np.var(y) * kernels.Matern52Kernel(100**2)
+		gp 		= george.GP(kernel)
+		gp.compute(x, yerr)
+
+		x_pred 	= np.linspace(min(x), max(x), 1000)
+		y_pred, y_pred_var 		= gp.predict(y, x, return_var=True)
+		long_variation[i,:] 	= y_pred
+		short_variation[i,:] 	= y - y_pred
+
+	# hack!
+	shift_function = short_variation
+
+	# update the weight
+	# my_P, my_pca_score, my_err_pca_score = my_pca(X=shift_function[:8,:].T, X_err=(err_shift_spectrum[:8,:]).T, nor=True)
+	my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=shift_function.T, X_err=err_shift_spectrum.T, nor=True)
+
+	# my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=power_spectrum.T, X_err=err_power_spectrum.T, nor=False)
+
+	# plot_all(k_mode=6, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+	# 	ind=my_pca_score.T, eind=my_err_pca_score.T, 
+	# 	ts_xlabel='BJD - 2400000 [d]', 
+	# 	rv_xlabel='$RV_{HARPS}$', 
+	# 	pe_xlabel='Period [days]',
+	# 	ind_yalbel='$\Delta RV_k$',
+	# 	file_name='PCA_delta_RV_k_max={:d}.png'.format(k_max))
+
+	bjd_daily 		= np.loadtxt('bjd_daily.txt')
+	plot_all(k_mode=n_pca, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+		ind=my_pca_score.T, eind=my_err_pca_score.T, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		rv_xlabel='$RV_{HARPS}$', 
+		pe_xlabel='Period [days]',
+		ind_yalbel='PCA',
+		file_name='PCA_delta_RV_k_max={:d}.png'.format(k_max))
+
+	
+	bjd_daily_all 	= bjd_daily	
+	idx_bjd 		= bjd_daily_all<58100
+	bjd_daily 		= bjd_daily_all[idx_bjd]
+
+	n_int 			= len(bjd_daily)
+	decimal  		= np.median(bjd_daily - [int(bjd_daily[i]) for i in np.arange(n_int)])
+	bjd_int 		= np.arange(int(min(bjd_daily)), int(max(bjd_daily))) + decimal
+	f 				= interp1d(bjd_daily_all, rv_daily, fill_value='extrapolate')
+	rv_daily_int 	= f(bjd_int)
+
+	# [round(bjd_daily[i]) for i in range(len(bjd_daily))]
+
+	x_pca_int = np.zeros((len(bjd_int), n_pca))
+	for i in range(n_pca):
+		f = interp1d(bjd_daily, my_pca_score[idx_bjd,i],fill_value='extrapolate')
+		x_pca_int[:,i] = f(bjd_int)
+
+	# plt.plot(bjd_daily_all, rv_daily, '-', alpha=0.2)
+	# plt.plot(bjd_int, rv_daily_int, '.', alpha=0.5)
+	# plt.show()
+
+
+	#---------------------------#
+	# Multiple Regression Model with multidays 
+	#---------------------------#
+	day = 3
+	rv_daily_int_7 = rv_daily_int[day:-day]
+
+	x_pca_int_7 = np.zeros((len(rv_daily_int[day:-day]), n_pca*(2*day+1)))
+	# x_fwhm_bis_int_7 = np.zeros((len(rv_daily_int[day:-day]), 2 * (2 * day + 1))) #new
+
+	# x_pca_int_7 = np.zeros((len(rv_daily_int_7), 6*(2*day+1)))
+
+	for n in range(len(rv_daily_int[day:-day])):
+		for i in range((2*day+1)):
+			x_pca_int_7[n, (n_pca*i):(n_pca*i+n_pca)] = x_pca_int[n+i, 0:n_pca]
+
+	#---------------------------#
+	# Regression Model with LASSO
+	#---------------------------#
+	from sklearn import linear_model
+	regr = linear_model.LinearRegression()
+	from sklearn.model_selection import cross_val_score
+	import seaborn as sns
+
+	from sklearn.model_selection import train_test_split
+	from sklearn.linear_model import Lasso
+	NN = 100
+	coeff_array_100 = np.zeros((day * 2 + 1, n_pca, NN))
+	std = np.zeros(NN)
+	err_coeff_array = np.zeros((day * 2 + 1, n_pca))
+	score = np.zeros(NN)
+
+	# alpha_array = np.array([0.005, 0.01, 0.02, 0.05])
+	# alpha_array = np.append(np.array([0.005, 0.01, 0.02, 0.05]), (np.arange(10) + 1) / 10)
+
+	alpha = 0.05
+
+	for rs in range(NN):
+		train_x, test_x, train_y, test_y = train_test_split(x_pca_int_7, rv_daily_int_7, test_size=0.3, random_state=rs)
+
+		X_train = train_x
+		y_train = train_y
+		X_test = test_x
+		y_test = test_y
+
+		lasso = Lasso(alpha=alpha).fit(X_train, y_train)
+
+		for i in range(day*2+1):
+			coeff_array_100[i, :,rs] = lasso.coef_[(i*n_pca):(i*n_pca+n_pca)]
+
+		y_hat = lasso.predict(test_x)
+		std[rs] = (np.sum((y_hat - test_y)**2) / np.size(test_y-1))**0.5
+		score[rs] = lasso.score(X_test, y_test)
+
+	coeff_array = np.mean(coeff_array_100, axis=2)
+	err_coeff_array = np.std(coeff_array_100, axis=2)
+	coeff_array[abs(coeff_array)<2*err_coeff_array] = 0
+	std_matrix[k_max-6] = np.mean(std)
+
+	x = np.arange(day * 2 + 1) - day
+	y = np.arange(n_pca) + 1
+
+	from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+
+	extent = np.min(x), np.max(x), np.min(y), np.max(y)
+	fig = plt.figure(frameon=False)
+	plt.title(r'$\lambda$ = {:.2f}, '.format(alpha)
+			  + 'score = {:.2f}, '.format(np.mean(score))
+			  + 'std = {:.2f}'.format(np.mean(std)))
+	plt.xlabel('Time [days]')
+	plt.ylabel('PCA')
+	ax = plt.gca()
+
+	im2 = plt.imshow(np.transpose(coeff_array),  vmin=-0.3, vmax=0.3, cmap=plt.cm.bwr, alpha=.9)
+
+	# Loop over data dimensions and create text annotations.
+	for i in range(n_pca):
+		for j in range(day*2+1):
+			if coeff_array[j, i] != 0:
+				text = ax.text(j, i, '{:.2f}'.format(coeff_array[j, i]),
+							   ha="center", va="center", color="k")
+
+	ax.set_xticks(np.arange(len(x)))
+	ax.set_yticks(np.arange(len(y)))
+	ax.set_xticklabels(x)
+	ax.set_yticklabels(y)
+
+	divider = make_axes_locatable(ax)
+	cax = divider.append_axes("right", size="5%", pad=0.05)
+
+	plt.colorbar(im2, cax=cax)
+	plt.savefig('lasso_coef_{:.2f}_{:d}'.format(alpha, k_max) +'.png')
+
+	plt.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # test the weighted averaged shift
 rv_test = np.zeros(shift_spectrum.shape[0])
@@ -1361,118 +1782,7 @@ plt.show()
 
 
 
-def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind_yalbel, file_name):
 
-	'''
-	e.g. 
-		k_mode 		= 11
-		t 			= bjd_daily
-		rv 			= rv_daily
-		erv 		= erv_daily
-		ind 		= shift_function
-		eind 	 	= err_shift_spectrum
-		ts_xlabel 	= 'BJD - 2400000 [d]'
-		rv_xlabel 	= '$RV_{HARPS}$'
-		pe_xlabel 	= 'Period [days]'
-		ind_yalbel	= 'A'
-		file_name 	= 'time-series_and_shift_correlation.png'
-
-	'''
-
-	from sklearn.linear_model import LinearRegression
-
-	# set up the plotting configureations
-	alpha1, alpha2 = [0.5,0.2]
-	widths 	= [7,1,7]
-	heights = [1]*(k_mode+1)
-	gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
-	plt.rcParams.update({'font.size': 12})
-	fig6, f6_axes = plt.subplots(figsize=(16, k_mode+1), ncols=3, nrows=k_mode+1, constrained_layout=True,
-	                             gridspec_kw=gs_kw)
-
-	# plots 
-	for r, row in enumerate(f6_axes):
-		for c, ax in enumerate(row):	
-
-			# time-series 
-			if c==0:
-				if r==0:
-					ax.errorbar(t, rv-np.mean(rv), erv, marker='.', color='black', ls='none', alpha=alpha1)
-					ax.set_title('Time-series')
-					ax.set_ylabel(rv_xlabel)
-				else:				
-					ax.errorbar(t, ind[r-1,:], eind[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
-					ax.set_ylabel(ind_yalbel+str(r))
-				if r!=k_mode:
-					ax.set_xticks([])
-				else:
-					ax.set_xlabel(ts_xlabel)
-
-			if c==1:
-				if r==0:
-					reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
-					score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
-					ax.set_title('score = {:.2f}'.format(score))
-					ax.plot(rv-np.mean(rv), rv-np.mean(rv), 'k.', alpha = alpha2)				
-				if r>0:
-					reg = LinearRegression().fit(rv.reshape(-1, 1), ind[r-1,:].reshape(-1, 1))
-					score = reg.score(rv.reshape(-1, 1), ind[r-1,:].reshape(-1, 1))
-					ax.set_title('score = {:.2f}'.format(score))
-					ax.plot(rv-np.mean(rv), ind[r-1,:], 'k.', alpha = alpha2)
-				if r!=k_mode:
-					ax.set_xticks([])
-				else:
-					ax.set_xlabel(rv_xlabel)
-				ax.yaxis.tick_right()
-
-			if c==2:
-				if r==0:
-					print('ldldl')
-					new_periodogram(t, rv, erv)
-					ax.set_title('Periodogram')
-				if r>0:
-					new_periodogram(t, ind[r-1,:], eind[r-1,:])
-				if r!=k_mode:
-					ax.set_xticks([])
-				if r==k_mode:
-					ax.set_xlabel(pe_xlabel)
-
-	plt.savefig(file_name)
-	plt.show()
-
-
-def new_periodogram(x, y, dy, N=None,
-				plot_min_t=2, max_f=1, spp=100, xc=None):
-	
-	from scipy.signal import find_peaks
-	from astropy.timeseries import LombScargle
-
-	time_span = (max(x) - min(x))
-	min_f   = 1/time_span
-
-	# ax = plt.subplot(N,1,i+1)
-	# if i == 0:
-	# 	plt.title(title)
-
-	frequency, power = LombScargle(x, y, dy).autopower(minimum_frequency=min_f,
-												   maximum_frequency=max_f,
-												   samples_per_peak=spp)
-
-	plot_x = 1/frequency
-	idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
-	height = max(power[idxx])*0.4
-	ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
-	peaks, _ = find_peaks(power[idxx], height=height)
-	ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
-	# if xc != None:
-	# 	ax.axvline(x=xc, color='k', linestyle='--', alpha = 0.5)
-
-	for n in range(len(plot_x[idxx][peaks])):
-		ax.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
-
-	ax.set_xlim([plot_min_t,time_span/2])
-	ax.set_ylim([0, 3*height])
-	ax.set_xscale('log')
 
 
 
@@ -1622,102 +1932,6 @@ np.savetxt('W.txt', weights)
 
 # weights[:, 6:11] = weights[:, 6:11] * 10
 
-def my_pca(X=shift_function, X_err=err_shift_spectrum, n_pca=None, nor=False):
-	'''
-	X.shape 	= (n_samples, n_features)
-	X_err.shape = (n_samples, n_features)
-	nor: normalization = True / False
-	'''
-	from wpca import WPCA
-
-	# X_err[:, 6] *= 1
-	weights = 1/X_err
-	# weights = np.ones(weights.shape)
-	# weights[:, 0] = weights[:, 0] / 100
-	kwds 	= {'weights': weights}
-
-	# subtract the weighted mean for each measurement type (dimension) of X
-	X_new 	= np.zeros(X.shape)
-	mean 	= np.zeros(X.shape[1])
-	std 	= np.zeros(X.shape[1])
-
-	for i in range(X.shape[1]):
-		mean[i] = np.average(X[:,i], weights=weights[:,i])
-		std[i] 	= np.average((X[:,i]-mean[i])**2, weights=weights[:,i])**0.5
-
-	for i in range(X.shape[1]):
-		if nor == True:
-			X_new[:,i] 		= (X[:,i] - mean[i]) / std[i]
-			weights[:,i]	= weights[:,i] * std[i] 	# may need to include the Fourier power later
-		else:
-			X_new[:,i] = X[:,i] - mean[i]
-
-	if n_pca==None:
-		n_pca = X.shape[1]
-
-	# Compute the PCA vectors & variance
-	pca 		= WPCA(n_components=n_pca).fit(X_new, **kwds)
-	# pca = WPCA(n_components=n_pca).fit(X_new)
-	pca_score 	= pca.transform(X_new, **kwds)
-	P 			= pca.components_
-	# Y 			= WPCA(n_components=n_pca).fit_reconstruct(X, **kwds)
-
-	# The following computes the errorbars
-	# The transpose is only intended to be consistent with the matrix format from Ludovic's paper
-	X_wpca 	= X_new.T
-	C 		= np.zeros(X_wpca.shape)
-	err_C 	= np.zeros(X_wpca.shape)
-
-	W 		= weights.T
-	P 		= P.T
-
-	for i in range(X_wpca.shape[1]):
-		w = np.diag(W[:, i]) ** 2
-		C[:, i] = np.linalg.inv(P.T @ w @ P) @ (P.T @ w @ X_wpca[:, i])
-
-		# the error is described by a covariance matrix of C
-		Cov_C = np.linalg.inv(P.T @ w @ P)
-
-		# inv(P'*w*P) * P' * w * cov(X(:,i)) * w * P * inv(P'*w*P)
-		# Cov_C2 = np.linalg.inv(P.T @ w @ P) @ P.T @ w @ np.diag(X_err) @ w @ P @ np.linalg.inv(P.T @ w @ P)
-		# diag_C2 = np.diag(Cov_C2)
-
-		diag_C = np.diag(Cov_C)
-		# print(i)
-		err_C[:, i] = diag_C ** 0.5
-
-	P 				= pca.components_
-	# pca_score 		= C.T # or pca_score
-	err_pca_score 	= err_C.T
-
-	#---------#
-	# results #
-	#---------#
-	cumulative_variance_explained = np.cumsum(
-		pca.explained_variance_ratio_) * 100  # look again the difference calculated from the other way
-	print('Cumulative variance explained vs PCA components')
-	for i in range(len(cumulative_variance_explained)):
-		print(i+1, '\t', '{:.3f}'.format(cumulative_variance_explained[i]))
-
-	for i in range(len(cumulative_variance_explained)):
-		if cumulative_variance_explained[i] < 90:
-			n_pca = i
-	n_pca += 2
-	if cumulative_variance_explained[0] > 90:
-		n_pca = 1
-
-	print('{:d} pca scores account for {:.2f}% variance explained'.format(n_pca,
-			cumulative_variance_explained[n_pca - 1]))
-
-	print('std(C) and midean(err_C) are\n',
-		  np.around(np.std(C[0:n_pca, :], axis=1), decimals=1), '\n',
-		  np.around(np.median(err_C[0:n_pca, :], axis=1), decimals=1))
-
-	return P, pca_score, err_pca_score
-
-# update the weight
-my_P, my_pca_score, my_err_pca_score = my_pca(X=shift_function[:8,:].T, X_err=(err_shift_spectrum[:8,:]).T, nor=True)
-my_P, my_pca_score, my_err_pca_score = my_pca(X=shift_function.T, X_err=(err_shift_spectrum).T, nor=True)
 
 time_series(x=bjd_daily, y=my_pca_score, dy=my_err_pca_score, N=6,
 			ylabel='PCA',
@@ -1725,19 +1939,9 @@ time_series(x=bjd_daily, y=my_pca_score, dy=my_err_pca_score, N=6,
 			file_name='FIESTA_RV_my_pca_score_time_series.png')
 
 
-my_P, my_pca_score, my_err_pca_score = my_pca(X=power_spectrum.T, X_err=err_power_spectrum.T, nor=False)
-'''
-Not working yet.... to be debugged 
-plot_all(k_mode=6, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
-	ind=my_pca_score.T, eind=my_err_pca_score.T, 
-	ts_xlabel='BJD - 2400000 [d]', 
-	rv_xlabel='$RV_{HARPS}$', 
-	pe_xlabel='Period [days]',
-	ind_yalbel='A',
-	file_name='PCA_A.png')
-'''
 
-k_mode 	= 2
+
+k_mode 	= 8
 alpha1, alpha2 = [0.5,0.2]
 widths 	= [8,1]
 heights = [1]*(k_mode+1)
@@ -1775,8 +1979,8 @@ for r, row in enumerate(f6_axes):
 			else:
 				ax.set_xlabel('$RV_{HARPS}$')
 			ax.yaxis.tick_right()
-# plt.savefig('time-series_and_PCA_shift_correlation.png')
-plt.savefig('time-series_and_PCA_A_correlation.png')			
+plt.savefig('time-series_and_PCA_shift_correlation.png')
+# plt.savefig('time-series_and_PCA_A_correlation.png')			
 plt.show()
 
 periodogram(x=bjd_daily, y=np.vstack((rv_daily, my_pca_score.T)).T, dy=np.vstack((erv_daily, my_err_pca_score.T)).T, N=7,
@@ -2352,24 +2556,6 @@ if 1:
 
 
 
-	##############################################################################
-	##############################################################################
-	bjd_daily_copy = bjd_daily
-	bjd_daily = bjd_daily[bjd_daily<58100]
-
-	n_int = len(bjd_daily)
-	decimal  = np.mean(bjd_daily - [int(bjd_daily[i]) for i in np.arange(n_int)])
-	bjd_int = np.arange(int(min(bjd_daily)), int(max(bjd_daily))) + decimal
-	f = interp1d(bjd_daily, rv_daily[bjd_daily_copy<58100])
-	rv_daily_int = f(bjd_int)
-	idx_bjd = bjd_daily_copy<58100
-
-	[round(bjd_daily[i]) for i in range(len(bjd_daily))]
-
-	x_pca_int = np.zeros((len(bjd_int), 10))
-	for i in range(10):
-		f = interp1d(bjd_daily, my_pca_score[bjd_daily_copy<58100,i])
-		x_pca_int[:,i] = f(bjd_int)
 
 
 
@@ -2387,7 +2573,7 @@ if 1:
 
 	x_fwhm_bis_int = np.zeros((len(bjd_int), 2))
 	for i in range(2):
-		f = interp1d(bjd_daily, fwhm_bis[bjd_daily_copy<58100,i])
+		f = interp1d(bjd_daily, fwhm_bis[bjd_daily_all<58100,i])
 		x_fwhm_bis_int[:,i] = f(bjd_int)
 
 
@@ -2536,33 +2722,16 @@ if 1:
 
 
 
-	#---------------------------#
-	# Multiple Regression Model with multidays 
-	#---------------------------#
-	n_pca = 2
-	day = 3
-	rv_daily_int_7 = rv_daily_int[day:-day]
 
-	x_pca_int_7 = np.zeros((len(rv_daily_int[day:-day]), n_pca*(2*day+1)))
-	x_fwhm_bis_int_7 = np.zeros((len(rv_daily_int[day:-day]), 2 * (2 * day + 1))) #new
 
-	# x_pca_int_7 = np.zeros((len(rv_daily_int), 6*(2*day+1)))
 
-	for n in range(len(rv_daily_int[day:-day])):
-		for i in range((2*day+1)):
-			x_pca_int_7[n, (n_pca*i):(n_pca*i+n_pca)] = x_pca_int[n+i, 0:n_pca]
 
 	for n in range(len(rv_daily_int[day:-day])): #new
 		for i in range((2*day+1)):
 			x_fwhm_bis_int_7[n, (2*i):(2*i+2)] = x_fwhm_bis_int[n+i, 0:2]
 
 
-	from sklearn import linear_model
-	regr = linear_model.LinearRegression()
-	from sklearn.model_selection import cross_val_score
-	import seaborn as sns
 
-	from sklearn.model_selection import train_test_split
 	train_x, test_x, train_y, test_y = train_test_split(x_pca_int_7, rv_daily_int_7, test_size=0.3, random_state=42)
 	# train_x, test_x, train_y, test_y = train_test_split(x_fwhm_bis_int_7, rv_daily_int_7, test_size=0.3, random_state=40) #new
 
@@ -2593,7 +2762,7 @@ if 1:
 
 	# meshplot
 	x = np.arange(7)-3
-	y = np.arange(6)+1
+	y = np.arange(n_pca)+1
 
 	# when layering multiple images, the images need to have the same
 	# extent.  This does not mean they need to have the same shape, but
@@ -2630,79 +2799,7 @@ if 1:
 
 
 
-	#---------------------------#
-	# Regression Model with LASSO
-	#---------------------------#
-	n_pca = 2
-	from sklearn.linear_model import Lasso
-	NN = 200
-	coeff_array_100 = np.zeros((day * 2 + 1, n_pca, NN))
-	std = np.zeros(NN)
-	err_coeff_array = np.zeros((day * 2 + 1, n_pca))
-	score = np.zeros(NN)
 
-	alpha_array = np.append(np.array([0, 0.01, 0.02, 0.05]), (np.arange(10) + 1) / 10)
-
-	for alpha in alpha_array:
-
-		for rs in range(NN):
-			train_x, test_x, train_y, test_y = train_test_split(x_pca_int_7, rv_daily_int_7, test_size=0.3, random_state=rs)
-
-			X_train = train_x
-			y_train = train_y
-			X_test = test_x
-			y_test = test_y
-
-			lasso = Lasso(alpha=alpha).fit(X_train, y_train)
-
-			for i in range(day*2+1):
-				coeff_array_100[i, :,rs] = lasso.coef_[(i*n_pca):(i*n_pca+n_pca)]
-
-			y_hat = lasso.predict(test_x)
-			std[rs] = (np.sum((y_hat - test_y)**2) / np.size(test_y-1))**0.5
-			score[rs] = lasso.score(X_test, y_test)
-
-		coeff_array = np.mean(coeff_array_100, axis=2)
-		err_coeff_array = np.std(coeff_array_100, axis=2)
-		coeff_array[coeff_array<err_coeff_array] = 0
-
-		x = np.arange(day * 2 + 1) - day
-		y = np.arange(n_pca) + 1
-
-		from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-
-		extent = np.min(x), np.max(x), np.min(y), np.max(y)
-		fig = plt.figure(frameon=False)
-		plt.title(r'$\lambda$ = {:.2f}, '.format(alpha)
-				  + 'score = {:.2f}, '.format(np.mean(score))
-				  + 'std = {:.2f}'.format(np.mean(std)))
-		plt.xlabel('Time [days]')
-		plt.ylabel('PCA')
-		ax = plt.gca()
-
-		im2 = plt.imshow(np.transpose(coeff_array),  vmin=-0.3, vmax=0.3, cmap=plt.cm.bwr, alpha=.9)
-
-		# Loop over data dimensions and create text annotations.
-		for i in range(n_pca):
-			for j in range(day*2+1):
-				if coeff_array[j, i] != 0:
-					text = ax.text(j, i, '{:.2f}'.format(coeff_array[j, i]),
-								   ha="center", va="center", color="k")
-
-		ax.set_xticks(np.arange(len(x)))
-		ax.set_yticks(np.arange(len(y)))
-		ax.set_xticklabels(x)
-		ax.set_yticklabels(y)
-
-		divider = make_axes_locatable(ax)
-		cax = divider.append_axes("right", size="5%", pad=0.05)
-
-		plt.colorbar(im2, cax=cax)
-		plt.savefig('lasso_coef_{:.5f}'.format(alpha) +'.png')
-
-		plt.close()
-		# plt.show()
 
 	#---------------------------#
 	# Regression Model with LASSO bis fwhm

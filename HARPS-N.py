@@ -772,12 +772,12 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 			# time-series 
 			if c==0:
 				if r==0:
-					ax.errorbar(t, rv-np.mean(rv), erv, marker='.', color='black', ls='none', alpha=alpha1)
+					ax.errorbar(t, rv-np.mean(rv), erv, marker='.', ms=5, color='black', ls='none', alpha=alpha1)
 					ax.set_title('Time-series')
 					ax.set_ylabel(rv_xlabel)
 				else:				
-					ax.errorbar(t, ind[r-1,:], eind[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
-					ax.set_ylabel(ind_yalbel+str(r))
+					ax.errorbar(t, ind[r-1,:], eind[r-1,:],  marker='.', ms=5, color='black', ls='none', alpha=alpha1)
+					ax.set_ylabel(ind_yalbel + '$_{' + str(r) + '}$')
 				if r!=k_mode:
 					ax.set_xticks([])
 				else:
@@ -812,6 +812,7 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 					ax.set_xlabel(pe_xlabel)
 
 	plt.savefig(file_name)
+
 
 
 def my_pca(X, X_err, n_pca=None, nor=False):
@@ -915,8 +916,8 @@ def my_pca(X, X_err, n_pca=None, nor=False):
 import george
 from george import kernels
 x 		= bjd_daily
-y 		= shift_function[0,:]
-yerr 	= err_shift_spectrum[0,:]
+y 		= my_pca_score[:,0]
+yerr 	= my_err_pca_score[:,0]
 kernel 	= np.var(y) * kernels.Matern52Kernel(100**2)
 gp 		= george.GP(kernel)
 gp.compute(x, yerr)
@@ -954,27 +955,84 @@ for k_max in (np.arange(15)+5):
 	shift_function 	= np.zeros(shift_spectrum.shape)
 	short_variation = np.zeros(shift_spectrum.shape)
 	long_variation 	= np.zeros(shift_spectrum.shape)
+
 	for i in range(shift_spectrum.shape[0]):
 		shift_function[i,:] = shift_spectrum[i,:] - rv_raw_daily
 
-		x 		= bjd_daily
-		y 		= shift_function[i,:]
-		yerr 	= err_shift_spectrum[i,:]
-		kernel 	= np.var(y) * kernels.Matern52Kernel(100**2)
-		gp 		= george.GP(kernel)
-		gp.compute(x, yerr)
+		def long_short_divide(x, y, yerr, r):
+			'''
+			x 		= bjd_daily
+			y 		= shift_function[i,:]
+			yerr 	= err_shift_spectrum[i,:]
+			'''
+			kernel 	= np.var(y) * kernels.Matern52Kernel(r**2)
+			gp 		= george.GP(kernel)
+			gp.compute(x, yerr)
 
-		x_pred 	= np.linspace(min(x), max(x), 1000)
-		y_pred, y_pred_var 		= gp.predict(y, x, return_var=True)
-		long_variation[i,:] 	= y_pred
-		short_variation[i,:] 	= y - y_pred
+			y_pred, _ 	= gp.predict(y, x, return_var=True)
+			long_term 	= y_pred
+			short_term 	= y - y_pred
+
+			return short_term, long_term
+
+		# bjd_daily = bjd_daily_all
+		short_variation[i,:], long_variation[i,:] = long_short_divide(
+			x=bjd_daily, y=shift_function[i,:], yerr=err_shift_spectrum[i,:], r=100)
 
 	# hack!
-	shift_function = short_variation
+	# shift_function = short_variation
+	# shift_function = long_variation
 
 	# update the weight
-	# my_P, my_pca_score, my_err_pca_score = my_pca(X=shift_function[:8,:].T, X_err=(err_shift_spectrum[:8,:]).T, nor=True)
 	my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=shift_function.T, X_err=err_shift_spectrum.T, nor=True)
+
+	short_variation = np.zeros((3, shift_spectrum.shape[1]))
+	long_variation 	= np.zeros((3, shift_spectrum.shape[1]))
+
+	for i in range(3):
+		short_variation[i,:], long_variation[i,:] = long_short_divide(
+			x=bjd_daily, y=my_pca_score[:,i], yerr=my_err_pca_score[:,i], r=100)
+
+	time_series(x=bjd_daily, y=short_variation.T, dy=my_err_pca_score[:,0:3], N=3, ylabel='PCA',
+					title='Rotation modulated variation time series',
+					file_name='Rotation_modulated_variation_time_series.png')
+
+	periodogram(x=bjd_daily, y=short_variation.T, dy=my_err_pca_score[:,0:3], N=3,
+				plot_min_t=2, study_min_t=5, max_f=1, spp=100,
+				ylabel='PCA',
+				title='Rotation modulated variation periodogram',
+				file_name='Rotation_modulated_variation_periodogram.png')
+
+	time_series(x=bjd_daily, y=long_variation.T, dy=my_err_pca_score[:,0:3], N=3, ylabel='PCA',
+					title='Long-term variation time series',
+					file_name='Long-term_variation_time_series.png')
+
+	periodogram(x=bjd_daily, y=long_variation.T, dy=my_err_pca_score[:,0:3], N=3,
+				plot_min_t=2, study_min_t=5, max_f=1, spp=100,
+				ylabel='PCA',
+				title='Long-term variation periodogram',
+				file_name='Long-term_variation_periodogram.png')	
+
+	rot_P, rot_pca_score, rot_err_pca_score, n_pca = my_pca(X=short_variation[0:3,:].T, X_err=my_err_pca_score[:,0:3], nor=True)
+
+	time_series(x=bjd_daily, y=rot_pca_score, dy=rot_err_pca_score, N=None, ylabel='PCA',
+					title='PCA on rotation modulated variation time series',
+					file_name='PCA_rotation_modulated_variation_time_series.png')
+
+	periodogram(x=bjd_daily, y=rot_pca_score, dy=rot_err_pca_score, N=None,
+				plot_min_t=2, study_min_t=5, max_f=1, spp=100,
+				ylabel='PCA',
+				title='Rotation modulated variation time series PCA periodogram',
+				file_name='Rotation_modulated_variation_time_series_PCA_periodogram.png')		
+
+	plt.plot(short_variation[0,:], rot_pca_score[:,0].T, '.')
+	plt.xlabel('PCA1')
+	plt.ylabel('new PCA1')
+	plt.show()
+
+	# hack #
+	my_pca_score = np.vstack((long_variation[0:3,:], rot_pca_score[:,0].reshape(1,567))).T
+	my_err_pca_score = np.vstack((my_err_pca_score[:,0:3].T, rot_err_pca_score[:,0].reshape(1,567))).T
 
 	# my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=power_spectrum.T, X_err=err_power_spectrum.T, nor=False)
 
@@ -987,15 +1045,25 @@ for k_max in (np.arange(15)+5):
 	# 	file_name='PCA_delta_RV_k_max={:d}.png'.format(k_max))
 
 	bjd_daily 		= np.loadtxt('bjd_daily.txt')
-	plot_all(k_mode=n_pca, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+	# plot_all(k_mode=n_pca, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+	# 	ind=my_pca_score.T, eind=my_err_pca_score.T, 
+	# 	ts_xlabel='BJD - 2400000 [d]', 
+	# 	rv_xlabel='$RV_{HARPS}$', 
+	# 	pe_xlabel='Period [days]',
+	# 	ind_yalbel='PCA',
+	# 	file_name=' PCA_delta_RV_k_max={:d}.png'.format(k_max))
+	
+	n_pca = 4
+	plot_all(k_mode=4, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
 		ind=my_pca_score.T, eind=my_err_pca_score.T, 
 		ts_xlabel='BJD - 2400000 [d]', 
 		rv_xlabel='$RV_{HARPS}$', 
 		pe_xlabel='Period [days]',
 		ind_yalbel='PCA',
-		file_name='PCA_delta_RV_k_max={:d}.png'.format(k_max))
+		file_name='PCA_long_short_trend.png')
+	plt.show()
 
-	
+
 	bjd_daily_all 	= bjd_daily	
 	idx_bjd 		= bjd_daily_all<58100
 	bjd_daily 		= bjd_daily_all[idx_bjd]
@@ -1021,7 +1089,7 @@ for k_max in (np.arange(15)+5):
 	#---------------------------#
 	# Multiple Regression Model with multidays 
 	#---------------------------#
-	day = 3
+	day = 5
 	rv_daily_int_7 = rv_daily_int[day:-day]
 
 	x_pca_int_7 = np.zeros((len(rv_daily_int[day:-day]), n_pca*(2*day+1)))
@@ -1062,19 +1130,19 @@ for k_max in (np.arange(15)+5):
 		X_test = test_x
 		y_test = test_y
 
-		lasso = Lasso(alpha=alpha).fit(X_train, y_train)
+		lasso = Lasso(alpha=alpha, max_iter=10000).fit(X_train, y_train)
 
 		for i in range(day*2+1):
 			coeff_array_100[i, :,rs] = lasso.coef_[(i*n_pca):(i*n_pca+n_pca)]
 
 		y_hat = lasso.predict(test_x)
-		std[rs] = (np.sum((y_hat - test_y)**2) / np.size(test_y-1))**0.5
+		std[rs] = (np.sum((y_hat - test_y)**2) / (np.size(test_y)-1))**0.5
 		score[rs] = lasso.score(X_test, y_test)
 
 	coeff_array = np.mean(coeff_array_100, axis=2)
 	err_coeff_array = np.std(coeff_array_100, axis=2)
 	coeff_array[abs(coeff_array)<2*err_coeff_array] = 0
-	std_matrix[k_max-6] = np.mean(std)
+	std_matrix[k_max-5] = np.mean(std)
 
 	x = np.arange(day * 2 + 1) - day
 	y = np.arange(n_pca) + 1
@@ -1487,94 +1555,6 @@ periodogram(x=bjd_daily, y=shift_function, dy=err_shift_spectrum, N=None,
 #----------------------------
 # New time-series
 #----------------------------
-from sklearn.linear_model import LinearRegression
-k_mode 	= 11
-alpha1, alpha2 = [0.5,0.2]
-widths 	= [8,1]
-heights = [1,1,1,1,1,1,1,1,1,1,1,1]
-gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
-plt.rcParams.update({'font.size': 12})
-fig6, f6_axes = plt.subplots(figsize=(10, k_mode+1), ncols=2, nrows=k_mode+1, constrained_layout=True,
-                             gridspec_kw=gs_kw)
-for r, row in enumerate(f6_axes):
-	for c, ax in enumerate(row):		
-		if c==0:
-			if r==0:
-				ax.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, marker='.', color='black', ls='none', alpha=alpha1)
-				ax.set_title('Time-series')
-				ax.set_ylabel('$RV_{HARPS}$')
-			else:				
-				ax.errorbar(bjd_daily, shift_function[r-1,:], err_shift_spectrum[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
-				ax.set_ylabel(r'$\Delta$RV$_{%d}$' %(r))
-			if r!=k_mode:
-				ax.set_xticks([])
-			else:
-				ax.set_xlabel('BJD - 2400000 [d]')
-		if c==1:
-			if r==0:
-				reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
-				score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
-				ax.set_title('score = {:.2f}'.format(score))
-				ax.plot(rv_daily-np.mean(rv_daily), rv_daily-np.mean(rv_daily), 'k.', alpha = alpha2)				
-			if r>0:
-				reg = LinearRegression().fit(rv_daily.reshape(-1, 1), shift_function[r-1,:].reshape(-1, 1))
-				score = reg.score(rv_daily.reshape(-1, 1), shift_function[r-1,:].reshape(-1, 1))
-				ax.set_title('score = {:.2f}'.format(score))
-				ax.plot(rv_daily-np.mean(rv_daily), shift_function[r-1,:], 'k.', alpha = alpha2)
-			if r!=k_mode:
-				ax.set_xticks([])
-			else:
-				ax.set_xlabel('$RV_{HARPS}$')
-			ax.yaxis.tick_right()
-plt.savefig('time-series_and_shift_correlation.png')			
-plt.show()
-
-
-
-from sklearn.linear_model import LinearRegression
-k_mode 	= 11
-alpha1, alpha2 = [0.5,0.2]
-widths 	= [8,1]
-heights = [1,1,1,1,1,1,1,1,1,1,1,1]
-gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
-plt.rcParams.update({'font.size': 10})
-fig6, f6_axes = plt.subplots(figsize=(10, k_mode+1), ncols=2, nrows=k_mode+1, constrained_layout=True,
-                             gridspec_kw=gs_kw)
-for r, row in enumerate(f6_axes):
-	for c, ax in enumerate(row):		
-		if c==0:
-			if r==0:
-				ax.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, marker='.', color='black', ls='none', alpha=alpha1)
-				ax.set_title('Time-series')
-				ax.set_ylabel('$RV_{HARPS}$')
-			else:				
-				ax.errorbar(bjd_daily, power_spectrum[r-1,:], err_power_spectrum[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
-				ax.set_ylabel(r'$A_{%d}$' %(r))
-			if r!=k_mode:
-				ax.set_xticks([])
-			else:
-				ax.set_xlabel('BJD - 2400000 [d]')
-		if c==1:
-			if r==0:
-				reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
-				score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
-				ax.set_title('score = {:.2f}'.format(score))
-				ax.plot(rv_daily-np.mean(rv_daily), rv_daily-np.mean(rv_daily), 'k.', alpha = alpha2)				
-			if r>0:
-				reg = LinearRegression().fit(rv_daily.reshape(-1, 1), power_spectrum[r-1,:].reshape(-1, 1))
-				score = reg.score(rv_daily.reshape(-1, 1), power_spectrum[r-1,:].reshape(-1, 1))
-				ax.set_title('score = {:.2f}'.format(score))
-				ax.plot(rv_daily-np.mean(rv_daily), power_spectrum[r-1,:], 'k.', alpha = alpha2)
-			if r!=k_mode:
-				ax.set_xticks([])
-			else:
-				ax.set_xlabel('$RV_{HARPS}$')
-			ax.yaxis.tick_right()
-plt.savefig('time-series_and_A_correlation.png')			
-plt.show()
-
-
-
 def periodogram(x, y, dy, N=None,
 				plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=None,
 				ylabel=None,
@@ -1660,126 +1640,24 @@ plt.tight_layout()
 plt.show()
 
 
-from sklearn.linear_model import LinearRegression
-k_mode 	= 11
-alpha1, alpha2 = [0.5,0.2]
-widths 	= [7,1,7]
-heights = [1,1,1,1,1,1,1,1,1,1,1,1]
-gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
-plt.rcParams.update({'font.size': 12})
-fig6, f6_axes = plt.subplots(figsize=(16, k_mode+1), ncols=3, nrows=k_mode+1, constrained_layout=True,
-                             gridspec_kw=gs_kw)
 
-for r, row in enumerate(f6_axes):
-	for c, ax in enumerate(row):	
-
-		# time-series 
-		if c==0:
-			if r==0:
-				ax.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, marker='.', color='black', ls='none', alpha=alpha1)
-				ax.set_title('Time-series')
-				ax.set_ylabel('$RV_{HARPS}$')
-			else:				
-				ax.errorbar(bjd_daily, power_spectrum[r-1,:], err_power_spectrum[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
-				ax.set_ylabel(r'$A_{%d}$' %(r))
-			if r!=k_mode:
-				ax.set_xticks([])
-			else:
-				ax.set_xlabel('BJD - 2400000 [d]')
-
-		if c==1:
-			if r==0:
-				reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
-				score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
-				ax.set_title('score = {:.2f}'.format(score))
-				ax.plot(rv_daily-np.mean(rv_daily), rv_daily-np.mean(rv_daily), 'k.', alpha = alpha2)				
-			if r>0:
-				reg = LinearRegression().fit(rv_daily.reshape(-1, 1), power_spectrum[r-1,:].reshape(-1, 1))
-				score = reg.score(rv_daily.reshape(-1, 1), power_spectrum[r-1,:].reshape(-1, 1))
-				ax.set_title('score = {:.2f}'.format(score))
-				ax.plot(rv_daily-np.mean(rv_daily), power_spectrum[r-1,:], 'k.', alpha = alpha2)
-			if r!=k_mode:
-				ax.set_xticks([])
-			else:
-				ax.set_xlabel('$RV_{HARPS}$')
-			ax.yaxis.tick_right()
-
-		if c==2:
-			if r==0:
-				new_periodogram(bjd_daily, rv_daily, erv_daily)
-				ax.set_title('Periodogram')
-			if r>0:
-				new_periodogram(bjd_daily, power_spectrum[r-1,:], err_power_spectrum[r-1,:])
-			if r!=k_mode:
-				ax.set_xticks([])
-			if r==k_mode:
-				ax.set_xlabel('Period [days]')
-
-plt.savefig('time-series_and_A_correlation.png')
+plot_all(k_mode=20, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+	ind=power_spectrum, eind=err_power_spectrum, 
+	ts_xlabel='BJD - 2400000 [d]', 
+	rv_xlabel='$RV_{HARPS}$', 
+	pe_xlabel='Period [days]',
+	ind_yalbel=r'$A$',
+	file_name='Amplitude_time-series_correlation_periodogram.png')
 plt.show()
 
-
-
-from sklearn.linear_model import LinearRegression
-k_mode 	= 11
-alpha1, alpha2 = [0.5,0.2]
-widths 	= [7,1,7]
-heights = [1,1,1,1,1,1,1,1,1,1,1,1]
-gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
-plt.rcParams.update({'font.size': 12})
-fig6, f6_axes = plt.subplots(figsize=(16, k_mode+1), ncols=3, nrows=k_mode+1, constrained_layout=True,
-                             gridspec_kw=gs_kw)
-
-for r, row in enumerate(f6_axes):
-	for c, ax in enumerate(row):	
-
-		# time-series 
-		if c==0:
-			if r==0:
-				ax.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, marker='.', color='black', ls='none', alpha=alpha1)
-				ax.set_title('Time-series')
-				ax.set_ylabel('$RV_{HARPS}$')
-			else:				
-				ax.errorbar(bjd_daily, shift_function[r-1,:], err_shift_spectrum[r-1,:],  marker='.', color='black', ls='none', alpha=alpha1)
-				ax.set_ylabel(r'$\Delta$RV$_{%d}$' %(r))
-			if r!=k_mode:
-				ax.set_xticks([])
-			else:
-				ax.set_xlabel('BJD - 2400000 [d]')
-
-		if c==1:
-			if r==0:
-				reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
-				score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
-				ax.set_title('score = {:.2f}'.format(score))
-				ax.plot(rv_daily-np.mean(rv_daily), rv_daily-np.mean(rv_daily), 'k.', alpha = alpha2)				
-			if r>0:
-				reg = LinearRegression().fit(rv_daily.reshape(-1, 1), shift_function[r-1,:].reshape(-1, 1))
-				score = reg.score(rv_daily.reshape(-1, 1), shift_function[r-1,:].reshape(-1, 1))
-				ax.set_title('score = {:.2f}'.format(score))
-				ax.plot(rv_daily-np.mean(rv_daily), shift_function[r-1,:], 'k.', alpha = alpha2)
-			if r!=k_mode:
-				ax.set_xticks([])
-			else:
-				ax.set_xlabel('$RV_{HARPS}$')
-			ax.yaxis.tick_right()
-
-		if c==2:
-			if r==0:
-				new_periodogram(bjd_daily, rv_daily, erv_daily)
-				ax.set_title('Periodogram')
-			if r>0:
-				new_periodogram(bjd_daily, shift_function[r-1,:], err_shift_spectrum[r-1,:])
-			if r!=k_mode:
-				ax.set_xticks([])
-			if r==k_mode:
-				plt.xlabel('Period [days]')
-
-plt.savefig('time-series_and_shift_correlation.png')			
+plot_all(k_mode=20, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+	ind=shift_function, eind=err_shift_spectrum, 
+	ts_xlabel='BJD - 2400000 [d]', 
+	rv_xlabel='$RV_{HARPS}$', 
+	pe_xlabel='Period [days]',
+	ind_yalbel=r'$\Delta RV$',
+	file_name='shift_time-series_correlation_periodogram.png')
 plt.show()
-
-
-
 
 
 
@@ -2982,25 +2860,6 @@ if 1:
 		plt.savefig('lasso_coef_{:.5f}'.format(alpha) +'.png')
 
 		plt.close()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

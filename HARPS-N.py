@@ -812,7 +812,88 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 					ax.set_xlabel(pe_xlabel)
 
 	plt.savefig(file_name)
+	plt.close('all')
 
+
+def plot_all_but_corr(k_mode, t, ind, eind, height_ratio, ts_xlabel, pe_xlabel, ind_yalbel, file_name):
+
+	'''
+	e.g. 
+		k_mode 		= 11
+		t 			= bjd_daily
+		ind 		= shift_function
+		eind 	 	= err_shift_spectrum
+		ts_xlabel 	= 'BJD - 2400000 [d]'
+		pe_xlabel 	= 'Period [days]'
+		ind_yalbel	= 'A'
+		file_name 	= 'time-series_and_shift_correlation.png'
+
+	'''
+
+	def new_periodogram(x, y, dy,
+					plot_min_t=2, max_f=1, spp=100):
+		
+		from scipy.signal import find_peaks
+		from astropy.timeseries import LombScargle
+
+		time_span = (max(x) - min(x))
+		min_f   = 1/time_span
+
+		frequency, power = LombScargle(x, y, dy).autopower(minimum_frequency=min_f,
+													   maximum_frequency=max_f,
+													   samples_per_peak=spp)
+
+		plot_x = 1/frequency
+		idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
+		height = max(power[idxx])*height_ratio
+		ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
+		peaks, _ = find_peaks(power[idxx], height=height)
+		ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
+
+		for n in range(len(plot_x[idxx][peaks])):
+			ax.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
+
+		ax.set_xlim([plot_min_t,time_span/2])
+		ax.set_ylim([0, 1.2*max(power[idxx])])
+		ax.set_xscale('log')
+
+	from sklearn.linear_model import LinearRegression
+
+	# set up the plotting configureations
+	alpha1, alpha2 = [0.5,0.2]
+	widths 	= [7,7]
+	heights = [1]*k_mode
+	gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
+	plt.rcParams.update({'font.size': 12})
+	fig6, f6_axes = plt.subplots(figsize=(16, k_mode), ncols=2, nrows=k_mode, constrained_layout=True,
+	                             gridspec_kw=gs_kw)
+
+	# plots 
+	for r, row in enumerate(f6_axes):
+		for c, ax in enumerate(row):	
+
+			# time-series 
+			if c==0:
+				ax.errorbar(t, ind[r,:], eind[r,:],  marker='.', ms=5, color='black', ls='none', alpha=alpha1)
+				ax.set_ylabel(ind_yalbel + '$_{' + str(r+1) + '}$')
+				if r==0:
+					ax.set_title('Time-series')
+				if r!=(k_mode-1):
+					ax.set_xticks([])
+				if r==(k_mode-1):
+					ax.set_xlabel(ts_xlabel)
+
+			if c==1:
+				new_periodogram(t, ind[r,:], eind[r,:])
+				if r==0:
+					ax.set_title('Periodogram')
+				if r!=(k_mode-1):
+					ax.set_xticks([])
+				if r==(k_mode-1):
+					ax.set_xlabel(pe_xlabel)
+
+	plt.savefig(file_name)
+	plt.close('all')
 
 
 def my_pca(X, X_err, n_pca=None, nor=False):
@@ -913,22 +994,35 @@ def my_pca(X, X_err, n_pca=None, nor=False):
 #----------------------------------
 # testing GP for filtering 
 #----------------------------------
-import george
-from george import kernels
-x 		= bjd_daily
-y 		= my_pca_score[:,0]
-yerr 	= my_err_pca_score[:,0]
-kernel 	= np.var(y) * kernels.Matern52Kernel(100**2)
-gp 		= george.GP(kernel)
-gp.compute(x, yerr)
 
-x_pred = np.linspace(min(x), max(x), 1000)
-pred, pred_var = gp.predict(y, x_pred, return_var=True)
+def long_short_divide(x, y, yerr, r):
+	'''
+	x 		= bjd_daily
+	y 		= shift_function[i,:]
+	yerr 	= err_shift_spectrum[i,:]
+	'''
 
-plt.fill_between(x_pred, pred - np.sqrt(pred_var), pred + np.sqrt(pred_var),
-                color="k", alpha=0.2)
+	import george
+	from george import kernels
+
+	kernel 	= np.var(y) * kernels.Matern52Kernel(r**2)
+	gp 		= george.GP(kernel)
+	gp.compute(x, yerr)
+
+	y_pred, _ 	= gp.predict(y, x, return_var=True)
+	long_term 	= y_pred
+	short_term 	= y - y_pred
+
+	return gp, short_term, long_term
+
+# example 
+gp, st, lt 		= long_short_divide(x=bjd_daily, y=my_pca_score[:,0], yerr=my_err_pca_score[:,0], r=100)
+x_pred 			= np.linspace(min(bjd_daily), max(bjd_daily), 1000)
+pred, pred_var 	= gp.predict(my_pca_score[:,0], x_pred, return_var=True)
+
+plt.fill_between(x_pred, pred - np.sqrt(pred_var), pred + np.sqrt(pred_var), color="k", alpha=0.2)
 plt.plot(x_pred, pred, "k", lw=1.5, alpha=0.5)
-plt.errorbar(x, y, yerr=yerr, fmt=".k", capsize=0)
+plt.errorbar(bjd_daily, my_pca_score[:,0], yerr=my_err_pca_score[:,0], fmt=".k", capsize=0)
 plt.xlabel("x")
 plt.ylabel("y")
 plt.show()
@@ -939,19 +1033,64 @@ plt.errorbar(x, y_pred-y, yerr=yerr, fmt=".k", capsize=0)
 plt.show()
 
 
+for i in range(3):
+
+plt.rcParams.update({'font.size': 12})
+
+def time_series(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
+				ylabel='k=',
+				title='Time series',
+				file_name='Time_series.png'):
+	if N==None:
+		N = y.shape[1]
+	plt.subplots(figsize=(12, N))
+
+	for i in range(N):
+		ax = plt.subplot(N, 1, i+1)
+		if i == 0:
+			plt.title(title)
+		plt.errorbar(x, y[:, i], dy[:, i], marker='.', ls='none', alpha=0.5, ms=5)
+		plt.ylabel(ylabel+str(i+1))
+		if i != N-1:
+			ax.set_xticks([])
+		else:
+			plt.xlabel('BJD - 2400000 [d]')
+	plt.savefig(file_name)
+	plt.show()
+
+gp, st, lt 		= long_short_divide(x=bjd_daily, y=my_pca_score[:,0], yerr=my_err_pca_score[:,0], r=100)
+x_pred 			= np.linspace(min(bjd_daily), max(bjd_daily), 1000)
+pred, pred_var 	= gp.predict(my_pca_score[:,0], x_pred, return_var=True)
+bjd_daily_pred, bjd_daily_pred_var 	= gp.predict(my_pca_score[:,0], bjd_daily, return_var=True)
+
+plt.subplots(figsize=(12, 3))
+ax = plt.subplot(3, 1, 1)
+plt.errorbar(bjd_daily, my_pca_score[:,0]-bjd_daily_pred, yerr=my_err_pca_score[:,0], fmt=".k", capsize=0, alpha=0.5)
+ax.set_xticks([])
+ax = plt.subplot(3, 1, 2)
+plt.fill_between(x_pred, pred - np.sqrt(pred_var), pred + np.sqrt(pred_var), color="k", alpha=0.2)
+plt.plot(x_pred, pred, "k", lw=1.5, alpha=0.5)
+ax.set_xticks([])
+ax = plt.subplot(3, 1, 3)
+gp, st, lt 		= long_short_divide(x=bjd_daily, y=my_pca_score[:,1], yerr=my_err_pca_score[:,1], r=100)
+pred, pred_var 	= gp.predict(my_pca_score[:,1], x_pred, return_var=True)
+plt.fill_between(x_pred, pred - np.sqrt(pred_var), pred + np.sqrt(pred_var), color="k", alpha=0.2)
+plt.plot(x_pred, pred, "k", lw=1.5, alpha=0.5)
+plt.show()
+
+
 
 std_matrix = np.zeros(15)
+
+k_max = 7 
 for k_max in (np.arange(15)+5):
 	df, shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, k_max=k_max)
-	# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF, eCCF)
-	# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily[:,0:20], eCCF_daily[:,0:20], template=[])
-	# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, out=out, template=[], Normality_test=True)
-	# shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, template=[])
 	# Convertion from km/s to m/s
 	shift_spectrum 		*= 1000
 	err_shift_spectrum 	*= 1000
 	RV_gauss 			*= 1000
 
+	bjd_daily 		= np.loadtxt('bjd_daily.txt')
 	shift_function 	= np.zeros(shift_spectrum.shape)
 	short_variation = np.zeros(shift_spectrum.shape)
 	long_variation 	= np.zeros(shift_spectrum.shape)
@@ -959,110 +1098,440 @@ for k_max in (np.arange(15)+5):
 	for i in range(shift_spectrum.shape[0]):
 		shift_function[i,:] = shift_spectrum[i,:] - rv_raw_daily
 
-		def long_short_divide(x, y, yerr, r):
-			'''
-			x 		= bjd_daily
-			y 		= shift_function[i,:]
-			yerr 	= err_shift_spectrum[i,:]
-			'''
-			kernel 	= np.var(y) * kernels.Matern52Kernel(r**2)
-			gp 		= george.GP(kernel)
-			gp.compute(x, yerr)
-
-			y_pred, _ 	= gp.predict(y, x, return_var=True)
-			long_term 	= y_pred
-			short_term 	= y - y_pred
-
-			return short_term, long_term
-
 		# bjd_daily = bjd_daily_all
-		short_variation[i,:], long_variation[i,:] = long_short_divide(
+		_, short_variation[i,:], long_variation[i,:] = long_short_divide(
 			x=bjd_daily, y=shift_function[i,:], yerr=err_shift_spectrum[i,:], r=100)
+
+	if 0: 
+		# Compute ICA
+		ica = FastICA(n_components=3)
+		S_ = ica.fit_transform(shift_function.T)  # Reconstruct signals
+		time_series(x=bjd_daily, y=S_, dy=err_shift_spectrum[0:3,:].T*0, ylabel='ICA',
+						title='ICA',
+						file_name='ICA.png')	
+		periodogram(x=bjd_daily, y=S_, dy=err_shift_spectrum[0:3,:].T,
+					plot_min_t=2, study_min_t=5, max_f=1, spp=100,
+					ylabel='ICA',
+					title='ICA periodogram',
+					file_name='ICA_periodogram.png')
+
+		# ICA on PCA
+		ica = FastICA(n_components=3)
+		S_ = ica.fit_transform(my_pca_score[:,0:4])  # Reconstruct signals
+		time_series(x=bjd_daily, y=S_, dy=my_pca_score[:,0:3]*0, ylabel='ICA',
+						title='ICA_pca',
+						file_name='ICA_pca.png')	
+		periodogram(x=bjd_daily, y=S_, dy=my_err_pca_score[:,0:3],
+					plot_min_t=2, study_min_t=5, max_f=1, spp=100,
+					ylabel='ICA',
+					title='ICA_pca periodogram',
+					file_name='ICA_pca_periodogram.png')
+
+
+	plt.rcParams.update({'font.size': 14})
+	plot_all(k_mode=k_max, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+		ind=power_spectrum, eind=err_power_spectrum, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		rv_xlabel='$RV_{HARPS}$', 
+		pe_xlabel='Period [days]',
+		ind_yalbel=r'$A$',
+		file_name='Amplitude_time-series_correlation_periodogram.png')
+	plt.show()
+
+	plot_all(k_mode=k_max, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+		ind=shift_function, eind=err_shift_spectrum, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		rv_xlabel='$RV_{HARPS}$', 
+		pe_xlabel='Period [days]',
+		ind_yalbel=r'$\Delta RV$',
+		file_name='shift_time-series_correlation_periodogram.png')
+	plt.show()
 
 	# hack!
 	# shift_function = short_variation
 	# shift_function = long_variation
 
-	# update the weight
 	my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=shift_function.T, X_err=err_shift_spectrum.T, nor=True)
 
-	short_variation = np.zeros((3, shift_spectrum.shape[1]))
-	long_variation 	= np.zeros((3, shift_spectrum.shape[1]))
+	plot_all(k_mode=3, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+		ind=my_pca_score.T, eind=my_err_pca_score.T, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		rv_xlabel='$RV_{HARPS}$', 
+		pe_xlabel='Period [days]',
+		ind_yalbel='PC',
+		file_name='PCA_delta_RV_k_max={:d}.png'.format(k_max))
+	plt.close()
 
-	for i in range(3):
-		short_variation[i,:], long_variation[i,:] = long_short_divide(
+	my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=power_spectrum.T, X_err=err_power_spectrum.T, nor=True)
+
+	plot_all(k_mode=3, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+		ind=my_pca_score.T, eind=my_err_pca_score.T, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		rv_xlabel='$RV_{HARPS}$', 
+		pe_xlabel='Period [days]',
+		ind_yalbel='PC',
+		file_name='PCA_A_k_max={:d}.png'.format(k_max))
+	plt.close()
+
+	k_feature = 3
+	short_variation = np.zeros((k_feature, shift_spectrum.shape[1]))
+	long_variation 	= np.zeros((k_feature, shift_spectrum.shape[1]))
+
+	for i in range(k_feature):
+		_, short_variation[i,:], long_variation[i,:] = long_short_divide(
 			x=bjd_daily, y=my_pca_score[:,i], yerr=my_err_pca_score[:,i], r=100)
 
-	time_series(x=bjd_daily, y=short_variation.T, dy=my_err_pca_score[:,0:3], N=3, ylabel='PCA',
+	time_series(x=bjd_daily, y=short_variation.T, dy=my_err_pca_score, N=k_feature, ylabel='PCA',
 					title='Rotation modulated variation time series',
 					file_name='Rotation_modulated_variation_time_series.png')
 
-	periodogram(x=bjd_daily, y=short_variation.T, dy=my_err_pca_score[:,0:3], N=3,
+	periodogram(x=bjd_daily, y=short_variation.T, dy=my_err_pca_score, N=k_feature,
 				plot_min_t=2, study_min_t=5, max_f=1, spp=100,
 				ylabel='PCA',
 				title='Rotation modulated variation periodogram',
 				file_name='Rotation_modulated_variation_periodogram.png')
 
-	time_series(x=bjd_daily, y=long_variation.T, dy=my_err_pca_score[:,0:3], N=3, ylabel='PCA',
+	plot_all_but_corr(k_mode=3, t=bjd_daily,
+		ind=short_variation, eind=my_err_pca_score[:,0:3].T, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		height_ratio = 0.8,
+		pe_xlabel='Period [days]',
+		ind_yalbel='S-PC',
+		file_name='Rotation_modulated_variation.png')
+	plt.close()
+
+	bgls_periodogram(x=bjd_daily, y=power_spectrum.T, dy=err_power_spectrum.T, N=None,
+				plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=None,
+				ylabel='A',
+				title = 'Periodogram',
+				file_name='Periodogram.png')
+
+	time_series(x=bjd_daily, y=long_variation.T, dy=my_err_pca_score, N=k_feature, ylabel='PCA',
 					title='Long-term variation time series',
 					file_name='Long-term_variation_time_series.png')
 
-	periodogram(x=bjd_daily, y=long_variation.T, dy=my_err_pca_score[:,0:3], N=3,
+	periodogram(x=bjd_daily, y=long_variation.T, dy=my_err_pca_score, N=k_feature,
 				plot_min_t=2, study_min_t=5, max_f=1, spp=100,
 				ylabel='PCA',
 				title='Long-term variation periodogram',
 				file_name='Long-term_variation_periodogram.png')	
 
-	rot_P, rot_pca_score, rot_err_pca_score, n_pca = my_pca(X=short_variation[0:3,:].T, X_err=my_err_pca_score[:,0:3], nor=True)
-
-	time_series(x=bjd_daily, y=rot_pca_score, dy=rot_err_pca_score, N=None, ylabel='PCA',
-					title='PCA on rotation modulated variation time series',
-					file_name='PCA_rotation_modulated_variation_time_series.png')
-
-	periodogram(x=bjd_daily, y=rot_pca_score, dy=rot_err_pca_score, N=None,
-				plot_min_t=2, study_min_t=5, max_f=1, spp=100,
-				ylabel='PCA',
-				title='Rotation modulated variation time series PCA periodogram',
-				file_name='Rotation_modulated_variation_time_series_PCA_periodogram.png')		
-
-	plt.plot(short_variation[0,:], rot_pca_score[:,0].T, '.')
-	plt.xlabel('PCA1')
-	plt.ylabel('new PCA1')
-	plt.show()
-
-	# hack #
-	my_pca_score = np.vstack((long_variation[0:3,:], rot_pca_score[:,0].reshape(1,567))).T
-	my_err_pca_score = np.vstack((my_err_pca_score[:,0:3].T, rot_err_pca_score[:,0].reshape(1,567))).T
-
-	# my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=power_spectrum.T, X_err=err_power_spectrum.T, nor=False)
-
-	# plot_all(k_mode=6, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
-	# 	ind=my_pca_score.T, eind=my_err_pca_score.T, 
-	# 	ts_xlabel='BJD - 2400000 [d]', 
-	# 	rv_xlabel='$RV_{HARPS}$', 
-	# 	pe_xlabel='Period [days]',
-	# 	ind_yalbel='$\Delta RV_k$',
-	# 	file_name='PCA_delta_RV_k_max={:d}.png'.format(k_max))
-
-	bjd_daily 		= np.loadtxt('bjd_daily.txt')
-	# plot_all(k_mode=n_pca, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
-	# 	ind=my_pca_score.T, eind=my_err_pca_score.T, 
-	# 	ts_xlabel='BJD - 2400000 [d]', 
-	# 	rv_xlabel='$RV_{HARPS}$', 
-	# 	pe_xlabel='Period [days]',
-	# 	ind_yalbel='PCA',
-	# 	file_name=' PCA_delta_RV_k_max={:d}.png'.format(k_max))
-	
-	n_pca = 4
-	plot_all(k_mode=4, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
-		ind=my_pca_score.T, eind=my_err_pca_score.T, 
+	plot_all_but_corr(k_mode=3, t=bjd_daily,
+		ind=long_variation, eind=my_err_pca_score[:,0:3].T, 
 		ts_xlabel='BJD - 2400000 [d]', 
-		rv_xlabel='$RV_{HARPS}$', 
+		height_ratio = 0.8,
 		pe_xlabel='Period [days]',
-		ind_yalbel='PCA',
-		file_name='PCA_long_short_trend.png')
-	plt.show()
+		ind_yalbel='L-PC',
+		file_name='Long-term_variation.png')
+	plt.close()
 
+	if 0:
+		rot_P, rot_pca_score, rot_err_pca_score, n_pca = my_pca(X=short_variation[0:3,:].T, X_err=my_err_pca_score[:,0:3], nor=True)
+
+		time_series(x=bjd_daily, y=rot_pca_score, dy=rot_err_pca_score, N=None, ylabel='PCA',
+						title='PCA on rotation modulated variation time series',
+						file_name='PCA_rotation_modulated_variation_time_series.png')
+
+		periodogram(x=bjd_daily, y=rot_pca_score, dy=rot_err_pca_score, N=None,
+					plot_min_t=2, study_min_t=5, max_f=1, spp=100,
+					ylabel='PCA',
+					title='Rotation modulated variation time series PCA periodogram',
+					file_name='Rotation_modulated_variation_time_series_PCA_periodogram.png')		
+
+		plt.plot(short_variation[0,:], rot_pca_score[:,0].T, '.')
+		plt.xlabel('PCA1')
+		plt.ylabel('new PCA1')
+		plt.show()
+
+		# hack #
+		my_pca_score = np.vstack((long_variation[0:3,:], rot_pca_score[:,0].reshape(1,567))).T
+		my_err_pca_score = np.vstack((my_err_pca_score[:,0:3].T, rot_err_pca_score[:,0].reshape(1,567))).T
+
+		# my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=power_spectrum.T, X_err=err_power_spectrum.T, nor=False)
+
+		# plot_all(k_mode=6, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+		# 	ind=my_pca_score.T, eind=my_err_pca_score.T, 
+		# 	ts_xlabel='BJD - 2400000 [d]', 
+		# 	rv_xlabel='$RV_{HARPS}$', 
+		# 	pe_xlabel='Period [days]',
+		# 	ind_yalbel='$\Delta RV_k$',
+		# 	file_name='PCA_delta_RV_k_max={:d}.png'.format(k_max))
+
+		bjd_daily 		= np.loadtxt('bjd_daily.txt')
+		
+		n_pca = 4
+		plot_all(k_mode=4, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+			ind=my_pca_score.T, eind=my_err_pca_score.T, 
+			ts_xlabel='BJD - 2400000 [d]', 
+			rv_xlabel='$RV_{HARPS}$', 
+			pe_xlabel='Period [days]',
+			ind_yalbel='PCA',
+			file_name='PCA_long_short_trend.png')
+		plt.show()
+
+
+	#---------------------------#
+	# Multiple Regression Model 
+	#---------------------------#
+	def weighted_avg_and_std(values, weights):
+	    """
+	    Return the weighted average and standard deviation.
+
+	    values, weights -- Numpy ndarrays with the same shape.
+	    """
+	    average = np.average(values, weights=weights)
+	    # Fast and numerically precise:
+	    variance = np.average((values-average)**2, weights=weights)
+	    return (average, np.sqrt(variance))
+
+	from sklearn import linear_model
+	regr = linear_model.LinearRegression()
+	from sklearn.model_selection import cross_val_score
+	import seaborn as sns
+
+	from sklearn.model_selection import train_test_split
+	from sklearn.linear_model import Lasso
+
+	NN = 100
+	coeff_array_100 = np.zeros((2*k_feature, NN))
+	std = np.zeros(NN)
+	err_coeff_array = np.zeros(2*k_feature)
+	score = np.zeros(NN)
+
+	alpha = 0.05
+
+	feature_array = np.vstack([short_variation, long_variation]).T
+	for rs in range(NN):
+		train_x, test_x, train_y, test_y = train_test_split(feature_array, rv_daily, test_size=0.01, random_state=rs)
+
+		X_train = train_x
+		y_train = train_y
+		X_test = test_x
+		y_test = test_y
+
+		lasso = Lasso(alpha=alpha, max_iter=10000).fit(X_train, y_train)
+
+		coeff_array_100[:,rs] = lasso.coef_
+
+		y_hat 	= lasso.predict(test_x)
+		_, w_std = weighted_avg_and_std(rv_daily, 1/erv_daily**2)
+		_, std[rs] = weighted_avg_and_std((y_hat - test_y), weights=1/erv_daily[np.in1d(rv_daily,test_y)]**2)
+		# std[rs] = (np.sum((y_hat - test_y)**2) / (np.size(test_y)-1))**0.5
+		score[rs] = lasso.score(X_test, y_test)
+
+	coeff_array = np.mean(coeff_array_100, axis=1)
+	err_coeff_array = np.std(coeff_array_100, axis=1)
+	coeff_array[abs(coeff_array)<err_coeff_array] = 0
+
+	import pandas as pd 
+	w_std = np.zeros(2*k_feature)
+	for i in range(2*k_feature):
+		_, w_std[i] = weighted_avg_and_std(feature_array[:,i], 1/erv_daily**2)
+	df = pd.DataFrame({	'coefficients'		: coeff_array, 
+						'std'				: w_std,
+						'variance'			: (coeff_array*w_std)**2,
+						'variance percentage': (coeff_array*w_std)**2 / sum((coeff_array*w_std)**2) * 100
+						})	
+	print(df.round({'coefficients'	: 2, 
+					'std'		: 2,
+					'variance'		: 2,
+					'variance percentage': 1
+					}))
+
+	#---------------------------------------------------------------------------------#
+	# Multiple Regression Model with multidays for short-term variabilities 
+	#---------------------------------------------------------------------------------#
+	for iday in range(5):
+		day = iday+3
+
+		bjd_daily = np.loadtxt('bjd_daily.txt')
+
+		bjd_daily_all 	= bjd_daily	
+		idx_bjd 		= bjd_daily_all<58100
+		bjd_daily 		= bjd_daily_all[idx_bjd]
+
+		n_int 			= len(bjd_daily)
+		decimal  		= np.median(bjd_daily - [int(bjd_daily[i]) for i in np.arange(n_int)])
+		bjd_int 		= np.arange(int(min(bjd_daily)), int(max(bjd_daily))) + decimal
+		f 				= interp1d(bjd_daily_all, rv_daily, fill_value='extrapolate')
+		rv_daily_int 	= f(bjd_int)
+		f 				= interp1d(bjd_daily_all, erv_daily, fill_value='extrapolate')
+		erv_daily_int	= f(bjd_int)
+
+		# [round(bjd_daily[i]) for i in range(len(bjd_daily))]
+
+		x_pca_int = np.zeros((len(bjd_int), 2*k_feature))
+		for i in range(2*k_feature):
+			f = interp1d(bjd_daily, feature_array[idx_bjd,i],fill_value='extrapolate')
+			x_pca_int[:,i] = f(bjd_int)
+
+		# plt.plot(bjd_daily_all, rv_daily, '-', alpha=0.2)
+		# plt.plot(bjd_int, rv_daily_int, '.', alpha=0.5)
+		# plt.show()
+
+		
+		rv_daily_int_7 = rv_daily_int[day:-day]
+
+		x_pca_int_7 = np.zeros((len(rv_daily_int[day:-day]), k_feature*(2*day+1)+k_feature))
+
+		for n in range(len(rv_daily_int[day:-day])):
+			for i in range((2*day+1)):			
+				x_pca_int_7[n, (k_feature*i):(k_feature*i+k_feature)] = x_pca_int[n+i, 0:k_feature] #(835,6)
+		x_pca_int_7[:,k_feature*(2*day+1):]=x_pca_int[day:-day, k_feature:]
+
+		#---------------------------#
+		# Regression Model with LASSO
+		#---------------------------#
+		from sklearn import linear_model
+		regr = linear_model.LinearRegression()
+		from sklearn.model_selection import cross_val_score
+		import seaborn as sns
+
+		from sklearn.model_selection import train_test_split
+		from sklearn.linear_model import Lasso
+		NN = 100
+		coeff_array_100 = np.zeros((k_feature*(2*day+1)+k_feature, NN))
+		std = np.zeros(NN)
+		err_coeff_array = np.zeros((k_feature*(2*day+1)+k_feature))
+		score = np.zeros(NN)
+
+		# alpha_array = np.array([0.005, 0.01, 0.02, 0.05])
+		# alpha_array = np.append(np.array([0.005, 0.01, 0.02, 0.05]), (np.arange(10) + 1) / 10)
+
+		alpha = 0.05
+
+		for rs in range(NN):
+			train_x, test_x, train_y, test_y = train_test_split(x_pca_int_7, rv_daily_int_7, test_size=0.3, random_state=rs)
+
+			X_train = train_x
+			y_train = train_y
+			X_test = test_x
+			y_test = test_y
+
+			lasso = Lasso(alpha=alpha, max_iter=10000).fit(X_train, y_train)
+
+			coeff_array_100[:,rs] = lasso.coef_
+
+			y_hat 	= lasso.predict(test_x)
+			_, std[rs] = weighted_avg_and_std((y_hat - test_y), weights=1/erv_daily_int[day:-day][np.in1d(rv_daily_int_7,test_y)]**2)
+			score[rs] = lasso.score(X_test, y_test)
+
+		coeff_array = np.mean(coeff_array_100, axis=1)
+		err_coeff_array = np.std(coeff_array_100, axis=1)
+		coeff_array[abs(coeff_array)<err_coeff_array] = 0
+
+		import pandas as pd 
+		# w_std = np.zeros(24)
+		# for i in range(24):
+		# 	_, w_std[i] = weighted_avg_and_std(feature_array[:,i], 1/erv_daily**2)
+		df = pd.DataFrame({	'coefficients'		: coeff_array, 
+							'uncertainties'		: err_coeff_array,
+							# 'std_PCA'			: w_std,
+							# 'significance'		: (coeff_array*w_std)**2 / sum((coeff_array*w_std)**2) * 100
+							})	
+		print(df.round({'coefficients'	: 2, 
+						'uncertainties'	: 3,
+						'std_PCA'		: 2,
+						'significance'	: 1,
+						}))
+
+		x = np.arange(day * 2 + 1) - day
+		y = np.arange(2*k_feature) + 1
+
+		coeff_array24 = coeff_array
+		coeff_array = np.zeros((day*2+1, 2*k_feature))
+		for i in range(k_feature):
+			coeff_array[:,i] = coeff_array24[i:k_feature*(2*day+1):k_feature]
+		coeff_array[day,k_feature:]=coeff_array24[k_feature*(2*day+1):]
+
+		from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+		extent = np.min(x), np.max(x), np.min(y), np.max(y)
+		fig = plt.figure(frameon=False)
+		plt.title(r'$\lambda$ = {:.2f}, '.format(alpha)
+				  + 'score = {:.2f}, '.format(np.mean(score))
+				  + 'std = {:.2f}'.format(np.mean(std)))
+		plt.xlabel('Time [days]')
+		plt.ylabel('PCA')
+		ax = plt.gca()
+
+		im2 = plt.imshow(np.transpose(coeff_array),  vmin=-0.3, vmax=0.3, cmap=plt.cm.bwr, alpha=.9)
+
+		# Loop over data dimensions and create text annotations.
+		for i in range(2*k_feature):
+			for j in range(day*2+1):
+				if coeff_array[j, i] != 0:
+					text = ax.text(j, i, '{:.2f}'.format(coeff_array[j, i]),
+								   ha="center", va="center", color="k")
+
+		ax.set_xticks(np.arange(len(x)))
+		ax.set_yticks(np.arange(len(y)))
+		ax.set_xticklabels(x)
+		ax.set_yticklabels(y)
+
+		divider = make_axes_locatable(ax)
+		cax = divider.append_axes("right", size="5%", pad=0.05)
+
+		plt.colorbar(im2, cax=cax)
+		plt.savefig('lasso_coef_{:.2f}_{:d}_{:d}'.format(alpha, day, k_max) +'.png')
+
+		plt.close()
+
+
+
+		significance_array = np.zeros(coeff_array.shape)
+		for i in range(coeff_array.shape[0]):
+			significance_array[i,:] = coeff_array[i,:]*w_std
+		significance_array = significance_array**2
+		significance_array = significance_array / significance_array.sum() * 100
+
+		fig = plt.figure(frameon=False)
+		plt.title(r'$\lambda$ = {:.2f}, '.format(alpha)
+				  + 'score = {:.2f}, '.format(np.mean(score))
+				  + 'std = {:.2f}'.format(np.mean(std)))
+		plt.xlabel('Time [days]')
+		plt.ylabel('PCA')
+		ax = plt.gca()
+
+		im2 = plt.imshow(np.transpose(significance_array),  vmin=-5, vmax=5, cmap=plt.cm.bwr, alpha=.9)
+
+		# Loop over data dimensions and create text annotations.
+		for i in range(2*k_feature):
+			for j in range(day*2+1):
+				if coeff_array[j, i] != 0:
+					text = ax.text(j, i, '{:.1f}'.format(significance_array[j, i]),
+								   ha="center", va="center", color="k")
+
+		ax.set_xticks(np.arange(len(x)))
+		ax.set_yticks(np.arange(len(y)))
+		ax.set_xticklabels(x)
+		ax.set_yticklabels(y)
+
+		divider = make_axes_locatable(ax)
+		cax = divider.append_axes("right", size="5%", pad=0.05)
+
+		plt.colorbar(im2, cax=cax)
+		plt.savefig('significance_coef_{:.2f}_{:d}_{:d}'.format(alpha, day, k_max) +'.png')
+
+		plt.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	#---------------------------#
+	# Multiple Regression Model with multidays 
+	#---------------------------#
 
 	bjd_daily_all 	= bjd_daily	
 	idx_bjd 		= bjd_daily_all<58100
@@ -1086,10 +1555,8 @@ for k_max in (np.arange(15)+5):
 	# plt.show()
 
 
-	#---------------------------#
-	# Multiple Regression Model with multidays 
-	#---------------------------#
-	day = 5
+
+	day = 3
 	rv_daily_int_7 = rv_daily_int[day:-day]
 
 	x_pca_int_7 = np.zeros((len(rv_daily_int[day:-day]), n_pca*(2*day+1)))
@@ -1528,6 +1995,55 @@ def periodogram(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
 	plt.show()
 
 
+def bgls_periodogram(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
+				plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=None,
+				ylabel=None,
+				title = 'Periodogram',
+				file_name='Periodogram.png'):
+
+	if N==None:
+		N = y.shape[1]
+	time_span = (max(x) - min(x))
+	min_f   = 1/time_span
+
+	plt.subplots(figsize=(12, N))
+
+	for i in range(N):
+		ax = plt.subplot(N,1,i+1)
+		if i == 0:
+			plt.title(title)
+
+		periods, probs = bgls(x, y[:, i], dy[:, i], plow=2, phigh=500, ofac=100)
+		# plt.plot(periods, probs, '-'); 
+		# # plt.xlim([0,20]); 
+		# plt.show()
+		plot_x = periods
+		power = np.log(probs)
+		idxx = (plot_x>=study_min_t)
+		height = max(power[plot_x>study_min_t])*0.5
+		plt.plot(plot_x, power, ls='-', label=r'$\xi$'+str(i+1), alpha=0.8)
+		peaks, _ = find_peaks(power[idxx], height=height)
+		plt.plot(plot_x[peaks], power[peaks], "o")
+		if xc != None:
+			plt.axvline(x=xc, color='k', linestyle='--', alpha = 0.5)
+
+		for n in range(len(plot_x[peaks])):
+			plt.text(plot_x[peaks][n], power[peaks][n], '%.1f' % plot_x[peaks][n], fontsize=10)
+
+		plt.xlim([plot_min_t,time_span])
+		plt.ylim([0,2.5*height])
+		plt.xscale('log')
+		plt.ylabel(ylabel+str(i+1))
+
+		if i != N-1:
+			ax.set_xticks([])
+		else:
+			plt.xlabel('Period [d]')
+
+	plt.savefig(file_name)
+	plt.show()	
+
+
 time_series(x=bjd_daily, y=power_spectrum, dy=err_power_spectrum, N=None,
 				title='$A_k$ time series',
 				file_name='FIESTA_amplitude_time_series.png')
@@ -1641,23 +2157,7 @@ plt.show()
 
 
 
-plot_all(k_mode=20, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
-	ind=power_spectrum, eind=err_power_spectrum, 
-	ts_xlabel='BJD - 2400000 [d]', 
-	rv_xlabel='$RV_{HARPS}$', 
-	pe_xlabel='Period [days]',
-	ind_yalbel=r'$A$',
-	file_name='Amplitude_time-series_correlation_periodogram.png')
-plt.show()
 
-plot_all(k_mode=20, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
-	ind=shift_function, eind=err_shift_spectrum, 
-	ts_xlabel='BJD - 2400000 [d]', 
-	rv_xlabel='$RV_{HARPS}$', 
-	pe_xlabel='Period [days]',
-	ind_yalbel=r'$\Delta RV$',
-	file_name='shift_time-series_correlation_periodogram.png')
-plt.show()
 
 
 

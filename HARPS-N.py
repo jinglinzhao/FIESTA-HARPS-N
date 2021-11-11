@@ -648,6 +648,12 @@ rv_daily = np.loadtxt('rv_daily.txt')
 rv_raw_daily = np.loadtxt('rv_raw_daily.txt')
 erv_daily = np.loadtxt('erv_daily.txt')
 
+bis_daily = np.loadtxt('bis_daily.txt')
+fwhm_daily = np.loadtxt('fwhm_daily.txt')
+ebis_daily = np.loadtxt('ebis_daily.txt')
+efwhm_daily = np.loadtxt('efwhm_daily.txt')
+
+
 # normality tests
 if 0:
 	shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily)
@@ -1365,6 +1371,7 @@ for k_max in (np.arange(15)+5):
 				x_pca_int_7[n, (k_feature*i):(k_feature*i+k_feature)] = x_pca_int[n+i, 0:k_feature] #(835,6)
 		x_pca_int_7[:,k_feature*(2*day+1):]=x_pca_int[day:-day, k_feature:]
 
+
 		#---------------------------#
 		# Regression Model with LASSO
 		#---------------------------#
@@ -1418,7 +1425,7 @@ for k_max in (np.arange(15)+5):
 			y = np.arange(2*k_feature) + 1
 
 			from mpl_toolkits.axes_grid1 import make_axes_locatable
-			fig = plt.figure(figsize=(len(x)/1.5, len(y)/1.5), frameon=False)
+			fig = plt.figure(figsize=(len(x)/1.5+1, len(y)/1.5+1), frameon=False)
 			plt.title('score = {:.2f}, '.format(score)
 					  + 'rms = {:.2f}'.format(w_rms))
 			plt.xlabel('Lag [days]')
@@ -1439,7 +1446,10 @@ for k_max in (np.arange(15)+5):
 			ax.set_xticks(np.arange(len(x)))
 			ax.set_yticks(np.arange(len(y)))
 			ax.set_xticklabels(x)
-			ax.set_yticklabels([r'S-PC$_1$', r'S-PC$_2$', r'S-PC$_3$', r'L-PC$_1$', r'L-PC$_2$', r'L-PC$_3$'])
+			if file_name == 'fwhm_bis_coef':
+				ax.set_yticklabels(['FWHM', 'BIS'])
+			else:
+				ax.set_yticklabels([r'S-PC$_1$', r'S-PC$_2$', r'S-PC$_3$', r'L-PC$_1$', r'L-PC$_2$', r'L-PC$_3$'])
 
 			divider = make_axes_locatable(ax)
 			cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -1458,6 +1468,69 @@ for k_max in (np.arange(15)+5):
 		significance_array = significance_array / significance_array.sum() * 100
 
 		imshow_matrix(significance_array, file_name='significance_coef')
+
+
+
+	# -----------------------
+	for iday in range(5):
+		day = iday+3
+		
+		bjd_daily = np.loadtxt('bjd_daily.txt')
+
+		fwhm_bis = np.vstack((fwhm_daily, bis_daily)).T
+		from sklearn.preprocessing import StandardScaler
+		scaler = StandardScaler()
+		fwhm_bis = scaler.fit_transform(fwhm_bis)
+		efwhm_bis = np.vstack((efwhm_daily/np.std(fwhm_daily), ebis_daily/np.std(bis_daily))).T  
+
+		x_fwhm_bis_int = np.zeros((len(bjd_int), 2))
+		for i in range(2):
+			f = interp1d(bjd_daily, fwhm_bis[:,i], fill_value='extrapolate')
+			x_fwhm_bis_int[:,i] = f(bjd_int)
+
+		x_fwhm_bis_int_7 = np.zeros((len(rv_daily_int[day:-day]), 2*(2*day+1)))
+		for n in range(len(rv_daily_int[day:-day])): #new
+			for i in range((2*day+1)):
+				x_fwhm_bis_int_7[n, (2*i):(2*i+2)] = x_fwhm_bis_int[n+i, 0:2]
+
+		rv_daily_int_7 = rv_daily_int[day:-day]
+		lasso = Lasso(alpha=alpha, max_iter=10000).fit(x_fwhm_bis_int_7, rv_daily_int_7, sample_weight=1/erv_daily_int[day:-day]**2)
+
+		y_hat 			= lasso.predict(x_fwhm_bis_int_7)
+		_, w_std_all 	= weighted_avg_and_std(rv_daily_int, 1/erv_daily_int**2)
+		_, w_rms 		= weighted_avg_and_std((y_hat - rv_daily_int_7), weights=1/erv_daily_int[day:-day]**2)
+		score 			= lasso.score(x_fwhm_bis_int_7, rv_daily_int_7, sample_weight=1/erv_daily_int[day:-day]**2)
+
+		coeff_matrix = np.zeros((day*2+1, 2))
+		for i in range(day*2+1):
+			coeff_matrix[i, :] = lasso.coef_[(i*2):(i*2+2)]
+
+		w_std = np.zeros(2)
+		for i in range(2):
+			_, w_std[i] = weighted_avg_and_std(x_fwhm_bis_int[day:-day,i], 1/erv_daily_int[day:-day]**2)
+
+		significance_array = np.zeros(coeff_matrix.shape)
+		for i in range(coeff_matrix.shape[0]):
+			significance_array[i,:] = coeff_matrix[i,:]*w_std
+		significance_array = significance_array**2
+		significance_array = significance_array / significance_array.sum() * 100
+
+		imshow_matrix(significance_array, file_name='fwhm_bis_coef')
+
+	# -----------------------
+
+	k_feature = 2
+	short_variation = np.zeros((k_feature, len(bjd_daily)))
+	long_variation 	= np.zeros((k_feature, len(bjd_daily)))
+
+	for i in range(k_feature):
+		_, short_variation[i,:], long_variation[i,:] = long_short_divide(
+			x=bjd_daily, y=fwhm_bis[:,i], yerr=efwhm_bis[:,i], r=100)
+
+
+
+
+
 
 
 
@@ -2878,15 +2951,7 @@ if 1:
 
 
 
-	fwhm_bis = np.vstack((fwhm_daily, bis_daily)).T
-	from sklearn.preprocessing import StandardScaler
-	scaler = StandardScaler()
-	fwhm_bis = scaler.fit_transform(fwhm_bis)
 
-	x_fwhm_bis_int = np.zeros((len(bjd_int), 2))
-	for i in range(2):
-		f = interp1d(bjd_daily, fwhm_bis[bjd_daily_all<58100,i])
-		x_fwhm_bis_int[:,i] = f(bjd_int)
 
 
 
@@ -3034,13 +3099,6 @@ if 1:
 
 
 
-
-
-
-
-	for n in range(len(rv_daily_int[day:-day])): #new
-		for i in range((2*day+1)):
-			x_fwhm_bis_int_7[n, (2*i):(2*i+2)] = x_fwhm_bis_int[n+i, 0:2]
 
 
 

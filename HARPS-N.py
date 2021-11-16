@@ -713,291 +713,6 @@ if 0:
 
 
 #----------------------------------
-# Important functions 
-#----------------------------------
-def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind_yalbel, file_name):
-
-	'''
-	e.g. 
-		k_mode 		= 11
-		t 			= bjd_daily
-		rv 			= rv_daily
-		erv 		= erv_daily
-		ind 		= shift_function
-		eind 	 	= err_shift_spectrum
-		ts_xlabel 	= 'BJD - 2400000 [d]'
-		rv_xlabel 	= '$RV_{HARPS}$'
-		pe_xlabel 	= 'Period [days]'
-		ind_yalbel	= 'A'
-		file_name 	= 'time-series_and_shift_correlation.png'
-
-	'''
-
-	def new_periodogram(x, y, dy,
-					plot_min_t=2, max_f=1, spp=100):
-		
-		from scipy.signal import find_peaks
-		from astropy.timeseries import LombScargle
-
-		time_span = (max(x) - min(x))
-		min_f   = 1/time_span
-
-		frequency, power = LombScargle(x, y, dy).autopower(minimum_frequency=min_f,
-													   maximum_frequency=max_f,
-													   samples_per_peak=spp)
-
-		plot_x = 1/frequency
-		idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
-		height = max(power[idxx])*0.4
-		ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
-		peaks, _ = find_peaks(power[idxx], height=height)
-		ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
-
-		for n in range(len(plot_x[idxx][peaks])):
-			ax.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
-
-		ax.set_xlim([plot_min_t,time_span/2])
-		ax.set_ylim([0, 3*height])
-		ax.set_xscale('log')
-
-	from sklearn.linear_model import LinearRegression
-
-	# set up the plotting configureations
-	alpha1, alpha2 = [0.5,0.2]
-	widths 	= [7,1,7]
-	heights = [1]*(k_mode+1)
-	gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
-	plt.rcParams.update({'font.size': 12})
-	fig6, f6_axes = plt.subplots(figsize=(16, k_mode+1), ncols=3, nrows=k_mode+1, constrained_layout=True,
-	                             gridspec_kw=gs_kw)
-
-	# plots 
-	for r, row in enumerate(f6_axes):
-		for c, ax in enumerate(row):	
-
-			# time-series 
-			if c==0:
-				if r==0:
-					ax.errorbar(t, rv-np.mean(rv), erv, marker='.', ms=5, color='black', ls='none', alpha=alpha1)
-					ax.set_title('Time-series')
-					ax.set_ylabel(rv_xlabel)
-				else:				
-					ax.errorbar(t, ind[r-1,:], eind[r-1,:],  marker='.', ms=5, color='black', ls='none', alpha=alpha1)
-					ax.set_ylabel(ind_yalbel + '$_{' + str(r) + '}$')
-				if r!=k_mode:
-					ax.set_xticks([])
-				else:
-					ax.set_xlabel(ts_xlabel)
-
-			if c==1:
-				if r==0:
-					reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
-					score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
-					ax.set_title('score = {:.2f}'.format(score))
-					ax.plot(rv-np.mean(rv), rv-np.mean(rv), 'k.', alpha = alpha2)				
-				if r>0:
-					reg = LinearRegression().fit(rv.reshape(-1, 1), ind[r-1,:].reshape(-1, 1))
-					score = reg.score(rv.reshape(-1, 1), ind[r-1,:].reshape(-1, 1))
-					ax.set_title('score = {:.2f}'.format(score))
-					ax.plot(rv-np.mean(rv), ind[r-1,:], 'k.', alpha = alpha2)
-				if r!=k_mode:
-					ax.set_xticks([])
-				else:
-					ax.set_xlabel(rv_xlabel)
-				ax.yaxis.tick_right()
-
-			if c==2:
-				if r==0:
-					new_periodogram(t, rv, erv)
-					ax.set_title('Periodogram')
-				if r>0:
-					new_periodogram(t, ind[r-1,:], eind[r-1,:])
-				if r!=k_mode:
-					ax.set_xticks([])
-				if r==k_mode:
-					ax.set_xlabel(pe_xlabel)
-
-	plt.savefig(file_name)
-	plt.close('all')
-
-
-def plot_all_but_corr(k_mode, t, ind, eind, height_ratio, ts_xlabel, pe_xlabel, ind_yalbel, file_name):
-
-	'''
-	e.g. 
-		k_mode 		= 11
-		t 			= bjd_daily
-		ind 		= shift_function
-		eind 	 	= err_shift_spectrum
-		ts_xlabel 	= 'BJD - 2400000 [d]'
-		pe_xlabel 	= 'Period [days]'
-		ind_yalbel	= 'A'
-		file_name 	= 'time-series_and_shift_correlation.png'
-
-	'''
-
-	def new_periodogram(x, y, dy,
-					plot_min_t=2, max_f=1, spp=100):
-		
-		from scipy.signal import find_peaks
-		from astropy.timeseries import LombScargle
-
-		time_span = (max(x) - min(x))
-		min_f   = 1/time_span
-
-		frequency, power = LombScargle(x, y, dy).autopower(minimum_frequency=min_f,
-													   maximum_frequency=max_f,
-													   samples_per_peak=spp)
-
-		plot_x = 1/frequency
-		idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
-		height = max(power[idxx])*height_ratio
-		ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
-		peaks, _ = find_peaks(power[idxx], height=height)
-		ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
-
-		for n in range(len(plot_x[idxx][peaks])):
-			ax.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
-
-		ax.set_xlim([plot_min_t,time_span/2])
-		ax.set_ylim([0, 1.2*max(power[idxx])])
-		ax.set_xscale('log')
-
-	from sklearn.linear_model import LinearRegression
-
-	# set up the plotting configureations
-	alpha1, alpha2 = [0.5,0.2]
-	widths 	= [7,7]
-	heights = [1]*k_mode
-	gs_kw 	= dict(width_ratios=widths, height_ratios=heights)
-	plt.rcParams.update({'font.size': 12})
-	fig6, f6_axes = plt.subplots(figsize=(16, k_mode), ncols=2, nrows=k_mode, constrained_layout=True,
-	                             gridspec_kw=gs_kw)
-
-	# plots 
-	for r, row in enumerate(f6_axes):
-		for c, ax in enumerate(row):	
-
-			# time-series 
-			if c==0:
-				ax.errorbar(t, ind[r,:], eind[r,:],  marker='.', ms=5, color='black', ls='none', alpha=alpha1)
-				ax.set_ylabel(ind_yalbel + '$_{' + str(r+1) + '}$')
-				if r==0:
-					ax.set_title('Time-series')
-				if r!=(k_mode-1):
-					ax.set_xticks([])
-				if r==(k_mode-1):
-					ax.set_xlabel(ts_xlabel)
-
-			if c==1:
-				new_periodogram(t, ind[r,:], eind[r,:])
-				if r==0:
-					ax.set_title('Periodogram')
-				if r!=(k_mode-1):
-					ax.set_xticks([])
-				if r==(k_mode-1):
-					ax.set_xlabel(pe_xlabel)
-
-	plt.savefig(file_name)
-	plt.close('all')
-
-
-def my_pca(X, X_err, n_pca=None, nor=False):
-	'''
-	X.shape 	= (n_samples, n_features)
-	X_err.shape = (n_samples, n_features)
-	nor: normalization = True / False
-	'''
-	from wpca import WPCA
-
-	# X_err[:, 6] *= 1
-	weights = 1/X_err
-	# weights = np.ones(weights.shape)
-	# weights[:, 0] = weights[:, 0] / 100
-	kwds 	= {'weights': weights}
-
-	# subtract the weighted mean for each measurement type (dimension) of X
-	X_new 	= np.zeros(X.shape)
-	mean 	= np.zeros(X.shape[1])
-	std 	= np.zeros(X.shape[1])
-
-	for i in range(X.shape[1]):
-		mean[i] = np.average(X[:,i], weights=weights[:,i])
-		std[i] 	= np.average((X[:,i]-mean[i])**2, weights=weights[:,i])**0.5
-
-	for i in range(X.shape[1]):
-		if nor == True:
-			X_new[:,i] 		= (X[:,i] - mean[i]) / std[i]
-			weights[:,i]	= weights[:,i] * std[i] 	# may need to include the Fourier power later
-			# weights[:,i]	= weights[:,i] * power_spectrum.T[:,i] * std[i] 	# may need to include the Fourier power later
-		else:
-			X_new[:,i] = X[:,i] - mean[i]
-
-	if n_pca==None:
-		n_pca = X.shape[1]
-
-	# Compute the PCA vectors & variance
-	pca 		= WPCA(n_components=n_pca).fit(X_new, **kwds)
-	# pca = WPCA(n_components=n_pca).fit(X_new)
-	pca_score 	= pca.transform(X_new, **kwds)
-	P 			= pca.components_
-	# Y 			= WPCA(n_components=n_pca).fit_reconstruct(X, **kwds)
-
-	# The following computes the errorbars
-	# The transpose is only intended to be consistent with the matrix format from Ludovic's paper
-	X_wpca 	= X_new.T
-	C 		= np.zeros(X_wpca.shape)
-	err_C 	= np.zeros(X_wpca.shape)
-
-	W 		= weights.T
-	P 		= P.T
-
-	for i in range(X_wpca.shape[1]):
-		w = np.diag(W[:, i]) ** 2
-		C[:, i] = np.linalg.inv(P.T @ w @ P) @ (P.T @ w @ X_wpca[:, i])
-
-		# the error is described by a covariance matrix of C
-		Cov_C = np.linalg.inv(P.T @ w @ P)
-
-		# inv(P'*w*P) * P' * w * cov(X(:,i)) * w * P * inv(P'*w*P)
-		# Cov_C2 = np.linalg.inv(P.T @ w @ P) @ P.T @ w @ np.diag(X_err) @ w @ P @ np.linalg.inv(P.T @ w @ P)
-		# diag_C2 = np.diag(Cov_C2)
-
-		diag_C = np.diag(Cov_C)
-		# print(i)
-		err_C[:, i] = diag_C ** 0.5
-
-	P 				= pca.components_
-	# pca_score 		= C.T # or pca_score
-	err_pca_score 	= err_C.T
-
-	#---------#
-	# results #
-	#---------#
-	cumulative_variance_explained = np.cumsum(
-		pca.explained_variance_ratio_) * 100  # look again the difference calculated from the other way
-	print('Cumulative variance explained vs PCA components')
-	for i in range(len(cumulative_variance_explained)):
-		print(i+1, '\t', '{:.3f}'.format(cumulative_variance_explained[i]))
-
-	for i in range(len(cumulative_variance_explained)):
-		if cumulative_variance_explained[i] < 89.5:
-			n_pca = i
-	n_pca += 2
-	if cumulative_variance_explained[0] > 89.5:
-		n_pca = 1
-
-	print('{:d} pca scores account for {:.2f}% variance explained'.format(n_pca,
-			cumulative_variance_explained[n_pca - 1]))
-
-	print('std(C) and midean(err_C) are\n',
-		  np.around(np.std(C[0:n_pca, :], axis=1), decimals=1), '\n',
-		  np.around(np.median(err_C[0:n_pca, :], axis=1), decimals=1))
-
-	return P, pca_score, err_pca_score, n_pca
-
-
-#----------------------------------
 # testing GP for filtering 
 #----------------------------------
 
@@ -1098,18 +813,16 @@ for k_max in (np.arange(15)+5):
 
 	bjd_daily 		= np.loadtxt('bjd_daily.txt')
 	shift_function 	= np.zeros(shift_spectrum.shape)
-	short_variation = np.zeros(shift_spectrum.shape)
-	long_variation 	= np.zeros(shift_spectrum.shape)
+	# short_variation = np.zeros(shift_spectrum.shape)
+	# long_variation 	= np.zeros(shift_spectrum.shape)
 
 	for i in range(shift_spectrum.shape[0]):
 		shift_function[i,:] = shift_spectrum[i,:] - rv_raw_daily
 
-		# bjd_daily = bjd_daily_all
-		_, short_variation[i,:], long_variation[i,:] = long_short_divide(
-			x=bjd_daily, y=shift_function[i,:], yerr=err_shift_spectrum[i,:], r=100)
+		# _, short_variation[i,:], long_variation[i,:] = long_short_divide(
+		# 	x=bjd_daily, y=shift_function[i,:], yerr=err_shift_spectrum[i,:], r=100)
 
-	if 0: 
-		# Compute ICA
+	if 0: # Compute ICA		
 		ica = FastICA(n_components=3)
 		S_ = ica.fit_transform(shift_function.T)  # Reconstruct signals
 		time_series(x=bjd_daily, y=S_, dy=err_shift_spectrum[0:3,:].T*0, ylabel='ICA',
@@ -1281,196 +994,86 @@ for k_max in (np.arange(15)+5):
 	#---------------------------#
 	# Multiple Regression Model 
 	#---------------------------#
-	def weighted_avg_and_std(values, weights):
-	    """
-	    Return the weighted average and standard deviation.
 
-	    values, weights -- Numpy ndarrays with the same shape.
-	    """
-	    average = np.average(values, weights=weights)
-	    # Fast and numerically precise:
-	    variance = np.average((values-average)**2, weights=weights)
-	    return (average, np.sqrt(variance))
+	feature_matrix = np.vstack([short_variation, long_variation]).T #(567,6)
+	y_hat, w_std_all, w_rms, score, df = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
 
-	from sklearn import linear_model
-	regr = linear_model.LinearRegression()
-	from sklearn.model_selection import cross_val_score
-	import seaborn as sns
-
-	from sklearn.model_selection import train_test_split
-	from sklearn.linear_model import Lasso
-
-	alpha = 0.05
-
-	feature_array = np.vstack([short_variation, long_variation]).T
-
-	lasso = Lasso(alpha=alpha, max_iter=10000).fit(feature_array, rv_daily, sample_weight=1/erv_daily**2)
-
-	coeff_array = lasso.coef_
-
-	y_hat 	= lasso.predict(feature_array)
-	_, w_std_all = weighted_avg_and_std(rv_daily, 1/erv_daily**2)
-	_, w_rms = weighted_avg_and_std((y_hat - rv_daily), weights=1/erv_daily**2)
-	score = lasso.score(feature_array, rv_daily, sample_weight=1/erv_daily**2)
-
-	import pandas as pd 
-	w_std = np.zeros(2*k_feature)
-	for i in range(2*k_feature):
-		_, w_std[i] = weighted_avg_and_std(feature_array[:,i], 1/erv_daily**2)
-
-	df = pd.DataFrame({	'coefficients'		: coeff_array, 
-						'std'				: w_std,
-						'variance'			: (coeff_array*w_std)**2,
-						'variance percentage': (coeff_array*w_std)**2 / sum((coeff_array*w_std)**2) * 100
-						})	
-
-	print(df.round({'coefficients'	: 2, 
-					'std'		: 2,
-					'variance'		: 2,
-					'variance percentage': 1
-					}))
 
 	#---------------------------------------------------------------------------------#
 	# Multiple Regression Model with multidays for short-term variabilities 
 	#---------------------------------------------------------------------------------#
+	bjd_daily 		= np.loadtxt('bjd_daily.txt')
+	idx_bjd 		= bjd_daily<58100
+	bjd_daily_part 	= bjd_daily[idx_bjd]
+	decimal  		= np.median(bjd_daily - [int(bjd_daily[i]) for i in np.arange(len(bjd_daily))])
+	bjd_int 		= np.arange(int(min(bjd_daily)), int(max(bjd_daily))) + decimal
+	f 				= interp1d(bjd_daily, rv_daily, fill_value='extrapolate')
+	rv_daily_int 	= f(bjd_int)
+	f 				= interp1d(bjd_daily, erv_daily, fill_value='extrapolate')
+	erv_daily_int	= f(bjd_int)
+
+
+y_hat, w_std_all, w_rms, score, variance_matrix = mlr(feature_matrix_int_lag, target_vector=rv_daily_int_lag, etarget_vector=erv_daily_int[day:-day])
+
+
 	for iday in range(5):
-		day = iday+3
+		day 		= iday+3
 
-		bjd_daily = np.loadtxt('bjd_daily.txt')
-
-		bjd_daily_all 	= bjd_daily	
-		idx_bjd 		= bjd_daily_all<58100
-		bjd_daily 		= bjd_daily_all[idx_bjd]
-
-		n_int 			= len(bjd_daily)
-		decimal  		= np.median(bjd_daily - [int(bjd_daily[i]) for i in np.arange(n_int)])
-		bjd_int 		= np.arange(int(min(bjd_daily)), int(max(bjd_daily))) + decimal
-		f 				= interp1d(bjd_daily_all, rv_daily, fill_value='extrapolate')
-		rv_daily_int 	= f(bjd_int)
-		f 				= interp1d(bjd_daily_all, erv_daily, fill_value='extrapolate')
-		erv_daily_int	= f(bjd_int)
-
-		# [round(bjd_daily[i]) for i in range(len(bjd_daily))]
-
-		x_pca_int = np.zeros((len(bjd_int), 2*k_feature))
-		for i in range(2*k_feature):
-			f = interp1d(bjd_daily, feature_array[idx_bjd,i],fill_value='extrapolate')
-			x_pca_int[:,i] = f(bjd_int)
+		k_feature2 	= feature_matrix.shape[1]
+		k_feature 	= int(k_feature2/2)
+		
+		feature_matrix_int = np.zeros((len(bjd_int), k_feature2))
+		for i in range(k_feature2):
+			f = interp1d(bjd_daily, feature_matrix[:,i],fill_value='extrapolate')
+			feature_matrix_int[:,i] = f(bjd_int)
 
 		# plt.plot(bjd_daily_all, rv_daily, '-', alpha=0.2)
 		# plt.plot(bjd_int, rv_daily_int, '.', alpha=0.5)
 		# plt.show()
-
 		
-		rv_daily_int_7 = rv_daily_int[day:-day]
+		rv_daily_int_lag = rv_daily_int[day:-day]
 
-		x_pca_int_7 = np.zeros((len(rv_daily_int[day:-day]), k_feature*(2*day+1)+k_feature))
+		feature_matrix_int_lag = np.zeros((len(rv_daily_int[day:-day]), k_feature2*(day+1)))
 
 		for n in range(len(rv_daily_int[day:-day])):
 			for i in range((2*day+1)):			
-				x_pca_int_7[n, (k_feature*i):(k_feature*i+k_feature)] = x_pca_int[n+i, 0:k_feature] #(835,6)
-		x_pca_int_7[:,k_feature*(2*day+1):]=x_pca_int[day:-day, k_feature:]
+				feature_matrix_int_lag[n, (k_feature*i):(k_feature*i+k_feature)] = feature_matrix_int[n+i, 0:k_feature] #(835,6)
+		feature_matrix_int_lag[:,k_feature*(2*day+1):] = feature_matrix_int[day:-day, k_feature:]
 
-
-		#---------------------------#
-		# Regression Model with LASSO
-		#---------------------------#
-		from sklearn import linear_model
-		regr = linear_model.LinearRegression()
-		from sklearn.model_selection import cross_val_score
-		import seaborn as sns
-
-		from sklearn.model_selection import train_test_split
-		from sklearn.linear_model import Lasso
-
-		# alpha_array = np.array([0.005, 0.01, 0.02, 0.05])
-		# alpha_array = np.append(np.array([0.005, 0.01, 0.02, 0.05]), (np.arange(10) + 1) / 10)
-
-		alpha = 0.05
-
-		lasso = Lasso(alpha=alpha, max_iter=10000).fit(x_pca_int_7, rv_daily_int_7, sample_weight=1/erv_daily_int[day:-day]**2)
-
-		coeff_array = lasso.coef_
-
-		y_hat 			= lasso.predict(x_pca_int_7)
-		_, w_std_all 	= weighted_avg_and_std(rv_daily_int_7, 1/erv_daily_int[day:-day]**2)
-		_, w_rms 		= weighted_avg_and_std((y_hat - rv_daily_int_7), weights=1/erv_daily_int[day:-day]**2)
-		score 			= lasso.score(x_pca_int_7, rv_daily_int_7, sample_weight=1/erv_daily_int[day:-day]**2)
-
-		import pandas as pd 
-		w_std = np.zeros(6)
-		for i in range(6):
-			_, w_std[i] = weighted_avg_and_std(x_pca_int[day:-day,i], 1/erv_daily_int[day:-day]**2)
-
-		# df = pd.DataFrame({	'coefficients'		: coeff_array, 
-		# 					'std'				: w_std,
-		# 					# 'variance'			: (coeff_array*w_std)**2,
-		# 					# 'variance percentage': (coeff_array*w_std)**2 / sum((coeff_array*w_std)**2) * 100
-		# 					})	
-
-		# print(df.round({'coefficients'	: 2, 
-		# 				'std'		: 2,
-		# 				# 'variance'		: 2,
-		# 				# 'variance percentage': 1
-		# 				}))
-
-		coeff_array24 = coeff_array
-		coeff_array = np.zeros((day*2+1, 2*k_feature))
-		for i in range(k_feature):
-			coeff_array[:,i] = coeff_array24[i:k_feature*(2*day+1):k_feature]
-		coeff_array[day,k_feature:]=coeff_array24[k_feature*(2*day+1):]
-
-		def imshow_matrix(coeff_array, file_name):
-			x = np.arange(day * 2 + 1) - day
-			y = np.arange(2*k_feature) + 1
-
-			from mpl_toolkits.axes_grid1 import make_axes_locatable
-			fig = plt.figure(figsize=(len(x)/1.5+1, len(y)/1.5+1), frameon=False)
-			plt.title('score = {:.2f}, '.format(score)
-					  + 'rms = {:.2f}'.format(w_rms))
-			plt.xlabel('Lag [days]')
-			ax = plt.gca()
-
-			if file_name == 'lasso_coef':
-				im2 = plt.imshow(np.transpose(coeff_array),  vmin=-5, vmax=5, cmap=plt.cm.bwr, alpha=.9)
-			else:
-				im2 = plt.imshow(np.transpose(coeff_array),  vmin=0, vmax=100, cmap=plt.cm.get_cmap('Reds'), alpha=.9)
-
-			# Loop over data dimensions and create text annotations.
-			for i in range(2*k_feature):
-				for j in range(day*2+1):
-					if coeff_array[j, i] != 0:
-						text = ax.text(j, i, '{:.1f}'.format(coeff_array[j, i]),
-									   ha="center", va="center", color="k")
-
-			ax.set_xticks(np.arange(len(x)))
-			ax.set_yticks(np.arange(len(y)))
-			ax.set_xticklabels(x)
-			if file_name == 'fwhm_bis_coef':
-				ax.set_yticklabels(['FWHM', 'BIS'])
-			else:
-				ax.set_yticklabels([r'S-PC$_1$', r'S-PC$_2$', r'S-PC$_3$', r'L-PC$_1$', r'L-PC$_2$', r'L-PC$_3$'])
-
-			divider = make_axes_locatable(ax)
-			cax = divider.append_axes("right", size="5%", pad=0.05)
-
-			plt.colorbar(im2, cax=cax) 
-			plt.savefig(file_name + '_{:.2f}_{:d}_{:d}'.format(alpha, day, k_max) +'.png')
-
-			plt.close()
+		y_hat, w_std_all, w_rms, score, variance_matrix = mlr(feature_matrix_int_lag, target_vector=rv_daily_int_lag, etarget_vector=erv_daily_int[day:-day])
 
 		imshow_matrix(coeff_array, file_name='lasso_coef')
-
-		significance_array = np.zeros(coeff_array.shape)
-		for i in range(coeff_array.shape[0]):
-			significance_array[i,:] = coeff_array[i,:]*w_std
-		significance_array = significance_array**2
-		significance_array = significance_array / significance_array.sum() * 100
-
-		imshow_matrix(significance_array, file_name='significance_coef')
+		imshow_matrix(variance_matrix, file_name='significance_coef')
 
 
 
+
+# start with a square Figure
+fig = plt.figure(figsize=(8, 8))
+
+# Add a gridspec with two rows and two columns and a ratio of 2 to 7 between
+# the size of the marginal axes and the main axes in both directions.
+# Also adjust the subplot parameters for a square plot.
+gs = fig.add_gridspec(2, 2,  width_ratios=(7, 2), height_ratios=(2, 7),
+                      left=0.1, right=0.9, bottom=0.1, top=0.9,
+                      wspace=0.05, hspace=0.05)
+
+ax = fig.add_subplot(gs[1, 0])
+ax_histx = fig.add_subplot(gs[0, 0], sharex=ax)
+ax_histy = fig.add_subplot(gs[1, 1], sharey=ax)
+
+# use the previously defined function
+scatter_hist(res1, res2, ax, ax_histx, ax_histy)
+
+plt.savefig('scatter_histogram.png')
+plt.show()
+
+
+
+
+
+	# -----------------------
+	# fwhm_bis with lags 
 	# -----------------------
 	for iday in range(5):
 		day = iday+3
@@ -1488,18 +1091,18 @@ for k_max in (np.arange(15)+5):
 			f = interp1d(bjd_daily, fwhm_bis[:,i], fill_value='extrapolate')
 			x_fwhm_bis_int[:,i] = f(bjd_int)
 
-		x_fwhm_bis_int_7 = np.zeros((len(rv_daily_int[day:-day]), 2*(2*day+1)))
+		x_fwhm_bis_int_lag = np.zeros((len(rv_daily_int[day:-day]), 2*(2*day+1)))
 		for n in range(len(rv_daily_int[day:-day])): #new
 			for i in range((2*day+1)):
-				x_fwhm_bis_int_7[n, (2*i):(2*i+2)] = x_fwhm_bis_int[n+i, 0:2]
+				x_fwhm_bis_int_lag[n, (2*i):(2*i+2)] = x_fwhm_bis_int[n+i, 0:2]
 
-		rv_daily_int_7 = rv_daily_int[day:-day]
-		lasso = Lasso(alpha=alpha, max_iter=10000).fit(x_fwhm_bis_int_7, rv_daily_int_7, sample_weight=1/erv_daily_int[day:-day]**2)
+		rv_daily_int_lag = rv_daily_int[day:-day]
+		lasso = Lasso(alpha=alpha, max_iter=10000).fit(x_fwhm_bis_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
 
-		y_hat 			= lasso.predict(x_fwhm_bis_int_7)
+		y_hat 			= lasso.predict(x_fwhm_bis_int_lag)
 		_, w_std_all 	= weighted_avg_and_std(rv_daily_int, 1/erv_daily_int**2)
-		_, w_rms 		= weighted_avg_and_std((y_hat - rv_daily_int_7), weights=1/erv_daily_int[day:-day]**2)
-		score 			= lasso.score(x_fwhm_bis_int_7, rv_daily_int_7, sample_weight=1/erv_daily_int[day:-day]**2)
+		_, w_rms 		= weighted_avg_and_std((y_hat - rv_daily_int_lag), weights=1/erv_daily_int[day:-day]**2)
+		score 			= lasso.score(x_fwhm_bis_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
 
 		coeff_matrix = np.zeros((day*2+1, 2))
 		for i in range(day*2+1):
@@ -1509,13 +1112,13 @@ for k_max in (np.arange(15)+5):
 		for i in range(2):
 			_, w_std[i] = weighted_avg_and_std(x_fwhm_bis_int[day:-day,i], 1/erv_daily_int[day:-day]**2)
 
-		significance_array = np.zeros(coeff_matrix.shape)
+		variance_matrix = np.zeros(coeff_matrix.shape)
 		for i in range(coeff_matrix.shape[0]):
-			significance_array[i,:] = coeff_matrix[i,:]*w_std
-		significance_array = significance_array**2
-		significance_array = significance_array / significance_array.sum() * 100
+			variance_matrix[i,:] = coeff_matrix[i,:]*w_std
+		variance_matrix = variance_matrix**2
+		variance_matrix = variance_matrix / variance_matrix.sum() * 100
 
-		imshow_matrix(significance_array, file_name='fwhm_bis_coef')
+		imshow_matrix(variance_matrix, file_name='fwhm_bis_coef')
 
 	# -----------------------
 
@@ -1527,18 +1130,88 @@ for k_max in (np.arange(15)+5):
 		_, short_variation[i,:], long_variation[i,:] = long_short_divide(
 			x=bjd_daily, y=fwhm_bis[:,i], yerr=efwhm_bis[:,i], r=100)
 
+	plot_all_but_corr(k_mode=2, t=bjd_daily,
+		ind=short_variation, eind=efwhm_bis.T, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		height_ratio = 0.8,
+		pe_xlabel='Period [days]',
+		ind_yalbel='ind',
+		file_name='fwhm_bis_Rotation_modulated_variation.png')
+	plt.close()
+
+	plot_all_but_corr(k_mode=2, t=bjd_daily,
+		ind=long_variation, eind=efwhm_bis.T, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		height_ratio = 0.8,
+		pe_xlabel='Period [days]',
+		ind_yalbel='ind',
+		file_name='fwhm_bis_Long-term_variation.png')
+	plt.close()
+
+	plot_all_but_corr(k_mode=4, t=bjd_daily,
+		ind=feature_matrix.T, eind=np.hstack([efwhm_bis, efwhm_bis]).T, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		height_ratio = 0.8,
+		pe_xlabel='Period [days]',
+		ind_yalbel=['S-FWHM', 'S-BIS', 'L-FWHM', 'L-BIS'],
+		file_name='fwhm_bis_variation.png')
+	plt.close()
 
 
+	for iday in range(5):
+		day = iday+3
 
+		feature_matrix_int 		= np.zeros((len(bjd_int), 2*k_feature))
+		feature_matrix 	= np.vstack([short_variation, long_variation]).T
+		bjd_daily 		= bjd_daily_all[idx_bjd]
+		for i in range(2*k_feature):
+			f = interp1d(bjd_daily, feature_matrix[idx_bjd,i],fill_value='extrapolate')
+			feature_matrix_int[:,i] = f(bjd_int)
 
+		rv_daily_int_lag = rv_daily_int[day:-day]
 
+		feature_matrix_int_lag = np.zeros((len(rv_daily_int[day:-day]), k_feature*(2*day+1)+k_feature))
 
+		for n in range(len(rv_daily_int[day:-day])):
+			for i in range((2*day+1)):			
+				feature_matrix_int_lag[n, (k_feature*i):(k_feature*i+k_feature)] = feature_matrix_int[n+i, 0:k_feature] #(835,6)
+		feature_matrix_int_lag[:,k_feature*(2*day+1):]=feature_matrix_int[day:-day, k_feature:]
 
+		alpha = 0.05
+
+		lasso = Lasso(alpha=alpha, max_iter=10000).fit(feature_matrix_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
+
+		coeff_array = lasso.coef_
+
+		y_hat 			= lasso.predict(feature_matrix_int_lag)
+		_, w_std_all 	= weighted_avg_and_std(rv_daily_int_lag, 1/erv_daily_int[day:-day]**2)
+		_, w_rms 		= weighted_avg_and_std((y_hat - rv_daily_int_lag), weights=1/erv_daily_int[day:-day]**2)
+		score 			= lasso.score(feature_matrix_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
+
+		import pandas as pd 
+		w_std = np.zeros(4)
+		for i in range(4):
+			_, w_std[i] = weighted_avg_and_std(feature_matrix_int[day:-day,i], 1/erv_daily_int[day:-day]**2)
+
+		coeff_array24 = coeff_array
+		coeff_array = np.zeros((day*2+1, 2*k_feature))
+		for i in range(k_feature):
+			coeff_array[:,i] = coeff_array24[i:k_feature*(2*day+1):k_feature]
+		coeff_array[day,k_feature:]=coeff_array24[k_feature*(2*day+1):]
+
+		variance_matrix = np.zeros(coeff_array.shape)
+		for i in range(coeff_array.shape[0]):
+			variance_matrix[i,:] = coeff_array[i,:]*w_std
+		variance_matrix = variance_matrix**2
+		variance_matrix = variance_matrix / variance_matrix.sum() * 100
+
+		imshow_matrix(variance_matrix, file_name='fwhm_bis_multi_coef')
 
 
 	#---------------------------#
 	# Multiple Regression Model with multidays 
 	#---------------------------#
+
 
 	bjd_daily_all 	= bjd_daily	
 	idx_bjd 		= bjd_daily_all<58100
@@ -1550,133 +1223,59 @@ for k_max in (np.arange(15)+5):
 	f 				= interp1d(bjd_daily_all, rv_daily, fill_value='extrapolate')
 	rv_daily_int 	= f(bjd_int)
 
-	# [round(bjd_daily[i]) for i in range(len(bjd_daily))]
-
-	x_pca_int = np.zeros((len(bjd_int), n_pca))
+	n_pca = 3
+	feature_matrix_int = np.zeros((len(bjd_int), n_pca))
 	for i in range(n_pca):
 		f = interp1d(bjd_daily, my_pca_score[idx_bjd,i],fill_value='extrapolate')
-		x_pca_int[:,i] = f(bjd_int)
-
-	# plt.plot(bjd_daily_all, rv_daily, '-', alpha=0.2)
-	# plt.plot(bjd_int, rv_daily_int, '.', alpha=0.5)
-	# plt.show()
+		feature_matrix_int[:,i] = f(bjd_int)
 
 
+	for iday in range(5):
+		day = iday+3
 
-	day = 3
-	rv_daily_int_7 = rv_daily_int[day:-day]
+		rv_daily_int_lag = rv_daily_int[day:-day]
 
-	x_pca_int_7 = np.zeros((len(rv_daily_int[day:-day]), n_pca*(2*day+1)))
-	# x_fwhm_bis_int_7 = np.zeros((len(rv_daily_int[day:-day]), 2 * (2 * day + 1))) #new
+		feature_matrix_int_lag = np.zeros((len(rv_daily_int[day:-day]), n_pca*(2*day+1)))
 
-	# x_pca_int_7 = np.zeros((len(rv_daily_int_7), 6*(2*day+1)))
+		for n in range(len(rv_daily_int[day:-day])):
+			for i in range((2*day+1)):
+				feature_matrix_int_lag[n, (n_pca*i):(n_pca*i+n_pca)] = feature_matrix_int[n+i, 0:n_pca]
 
-	for n in range(len(rv_daily_int[day:-day])):
-		for i in range((2*day+1)):
-			x_pca_int_7[n, (n_pca*i):(n_pca*i+n_pca)] = x_pca_int[n+i, 0:n_pca]
+		from sklearn import linear_model
+		regr = linear_model.LinearRegression()
+		from sklearn.model_selection import cross_val_score
+		import seaborn as sns
 
-	#---------------------------#
-	# Regression Model with LASSO
-	#---------------------------#
-	from sklearn import linear_model
-	regr = linear_model.LinearRegression()
-	from sklearn.model_selection import cross_val_score
-	import seaborn as sns
+		from sklearn.model_selection import train_test_split
+		from sklearn.linear_model import Lasso
 
-	from sklearn.model_selection import train_test_split
-	from sklearn.linear_model import Lasso
-	NN = 100
-	coeff_array_100 = np.zeros((day * 2 + 1, n_pca, NN))
-	std = np.zeros(NN)
-	err_coeff_array = np.zeros((day * 2 + 1, n_pca))
-	score = np.zeros(NN)
+		alpha = 0.05
+		lasso = Lasso(alpha=alpha, max_iter=10000).fit(feature_matrix_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
 
-	# alpha_array = np.array([0.005, 0.01, 0.02, 0.05])
-	# alpha_array = np.append(np.array([0.005, 0.01, 0.02, 0.05]), (np.arange(10) + 1) / 10)
+		coeff_array = lasso.coef_
 
-	alpha = 0.05
+		y_hat 			= lasso.predict(feature_matrix_int_lag)
+		_, w_std_all 	= weighted_avg_and_std(rv_daily_int_lag, 1/erv_daily_int[day:-day]**2)
+		_, w_rms 		= weighted_avg_and_std((y_hat - rv_daily_int_lag), weights=1/erv_daily_int[day:-day]**2)
+		score 			= lasso.score(feature_matrix_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
 
-	for rs in range(NN):
-		train_x, test_x, train_y, test_y = train_test_split(x_pca_int_7, rv_daily_int_7, test_size=0.3, random_state=rs)
+		w_std = np.zeros(n_pca)
+		for i in range(n_pca):
+			_, w_std[i] = weighted_avg_and_std(feature_matrix_int[day:-day,i], 1/erv_daily_int[day:-day]**2)
 
-		X_train = train_x
-		y_train = train_y
-		X_test = test_x
-		y_test = test_y
+		coeff_array24 = coeff_array
+		coeff_array = np.zeros((day*2+1, n_pca))
+		for i in range(n_pca):
+			coeff_array[:,i] = coeff_array24[i:n_pca*(2*day+1):n_pca]
+		coeff_array[day,n_pca:]=coeff_array24[n_pca*(2*day+1):]
 
-		lasso = Lasso(alpha=alpha, max_iter=10000).fit(X_train, y_train)
+		variance_matrix = np.zeros(coeff_array.shape)
+		for i in range(coeff_array.shape[0]):
+			variance_matrix[i,:] = coeff_array[i,:]*w_std
+		variance_matrix = variance_matrix**2
+		variance_matrix = variance_matrix / variance_matrix.sum() * 100
 
-		for i in range(day*2+1):
-			coeff_array_100[i, :,rs] = lasso.coef_[(i*n_pca):(i*n_pca+n_pca)]
-
-		y_hat = lasso.predict(test_x)
-		std[rs] = (np.sum((y_hat - test_y)**2) / (np.size(test_y)-1))**0.5
-		score[rs] = lasso.score(X_test, y_test)
-
-	coeff_array = np.mean(coeff_array_100, axis=2)
-	err_coeff_array = np.std(coeff_array_100, axis=2)
-	coeff_array[abs(coeff_array)<2*err_coeff_array] = 0
-	std_matrix[k_max-5] = np.mean(std)
-
-	x = np.arange(day * 2 + 1) - day
-	y = np.arange(n_pca) + 1
-
-	from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-
-	extent = np.min(x), np.max(x), np.min(y), np.max(y)
-	fig = plt.figure(frameon=False)
-	plt.title(r'$\lambda$ = {:.2f}, '.format(alpha)
-			  + 'score = {:.2f}, '.format(np.mean(score))
-			  + 'std = {:.2f}'.format(np.mean(std)))
-	plt.xlabel('Time [days]')
-	plt.ylabel('PCA')
-	ax = plt.gca()
-
-	im2 = plt.imshow(np.transpose(coeff_array),  vmin=-0.3, vmax=0.3, cmap=plt.cm.bwr, alpha=.9)
-
-	# Loop over data dimensions and create text annotations.
-	for i in range(n_pca):
-		for j in range(day*2+1):
-			if coeff_array[j, i] != 0:
-				text = ax.text(j, i, '{:.2f}'.format(coeff_array[j, i]),
-							   ha="center", va="center", color="k")
-
-	ax.set_xticks(np.arange(len(x)))
-	ax.set_yticks(np.arange(len(y)))
-	ax.set_xticklabels(x)
-	ax.set_yticklabels(y)
-
-	divider = make_axes_locatable(ax)
-	cax = divider.append_axes("right", size="5%", pad=0.05)
-
-	plt.colorbar(im2, cax=cax)
-	plt.savefig('lasso_coef_{:.2f}_{:d}'.format(alpha, k_max) +'.png')
-
-	plt.close()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+		imshow_matrix(variance_matrix, file_name='pca_coef')
 
 
 
@@ -2969,7 +2568,7 @@ if 1:
 	fig, axes = plt.subplots(figsize=(12, 18))
 	for i in range(n_pca):
 		ax = plt.subplot(n_pca,1,i+1)
-		corr_array  = signal.correlate(rv_daily_int-min(rv_daily_int), x_pca_int[:, i]-min(x_pca_int[:, i])) / sum(x_pca_int[:, i]-min(x_pca_int[:, i]))
+		corr_array  = signal.correlate(rv_daily_int-min(rv_daily_int), feature_matrix_int[:, i]-min(feature_matrix_int[:, i])) / sum(feature_matrix_int[:, i]-min(feature_matrix_int[:, i]))
 		plt.plot(dt, corr_array, '.', alpha=0.8)
 		print(dt[corr_array == max(corr_array)])
 		# plt.plot(bjd_daily[19:613-1], moving_average(x_pca[:, i], 40), '-', alpha=1)
@@ -3102,8 +2701,8 @@ if 1:
 
 
 
-	train_x, test_x, train_y, test_y = train_test_split(x_pca_int_7, rv_daily_int_7, test_size=0.3, random_state=42)
-	# train_x, test_x, train_y, test_y = train_test_split(x_fwhm_bis_int_7, rv_daily_int_7, test_size=0.3, random_state=40) #new
+	train_x, test_x, train_y, test_y = train_test_split(feature_matrix_int_lag, rv_daily_int_lag, test_size=0.3, random_state=42)
+	# train_x, test_x, train_y, test_y = train_test_split(x_fwhm_bis_int_lag, rv_daily_int_lag, test_size=0.3, random_state=40) #new
 
 	regr.fit (train_x, train_y)
 	# The coefficients
@@ -3187,7 +2786,7 @@ if 1:
 	for alpha in alpha_array:
 
 		for rs in range(NN):
-			train_x, test_x, train_y, test_y = train_test_split(x_fwhm_bis_int_7, rv_daily_int_7, test_size=0.3, random_state=rs)
+			train_x, test_x, train_y, test_y = train_test_split(x_fwhm_bis_int_lag, rv_daily_int_lag, test_size=0.3, random_state=rs)
 
 			X_train = train_x
 			y_train = train_y
@@ -3269,7 +2868,7 @@ if 1:
 	# # define model
 	# model = LassoCV(alphas=np.arange(0, 1, 0.01), cv=cv, n_jobs=-1)
 	# # fit model
-	# model.fit(x_pca_int_7, rv_daily_int_7)
+	# model.fit(feature_matrix_int_lag, rv_daily_int_lag)
 	# # summarize chosen configuration
 	# print('alpha: %f' % model.alpha_)
 	#
@@ -3286,7 +2885,7 @@ if 1:
 	# # define search
 	# search = GridSearchCV(model, grid, scoring='neg_mean_absolute_error', cv=cv, n_jobs=-1)
 	# # perform the search
-	# results = search.fit(x_pca_int_7, rv_daily_int_7)
+	# results = search.fit(feature_matrix_int_lag, rv_daily_int_lag)
 	# # summarize
 	# print('MAE: %.3f' % results.best_score_)
 	# print('Config: %s' % results.best_params_)

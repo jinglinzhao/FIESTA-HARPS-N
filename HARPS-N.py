@@ -716,25 +716,6 @@ if 0:
 # testing GP for filtering 
 #----------------------------------
 
-def long_short_divide(x, y, yerr, r):
-	'''
-	x 		= bjd_daily
-	y 		= shift_function[i,:]
-	yerr 	= err_shift_spectrum[i,:]
-	'''
-
-	import george
-	from george import kernels
-
-	kernel 	= np.var(y) * kernels.Matern52Kernel(r**2)
-	gp 		= george.GP(kernel)
-	gp.compute(x, yerr)
-
-	y_pred, _ 	= gp.predict(y, x, return_var=True)
-	long_term 	= y_pred
-	short_term 	= y - y_pred
-
-	return gp, short_term, long_term
 
 # example 
 gp, st, lt 		= long_short_divide(x=bjd_daily, y=my_pca_score[:,0], yerr=my_err_pca_score[:,0], r=100)
@@ -995,8 +976,33 @@ for k_max in (np.arange(15)+5):
 	# Multiple Regression Model 
 	#---------------------------#
 
+	# Model 1 #
+	feature_matrix = my_pca_score[:,0:3] #(567,3)
+	y_hat1, w_std_all, w_rms1, score1, df1 = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
+
+	# Model 2 #
 	feature_matrix = np.vstack([short_variation, long_variation]).T #(567,6)
-	y_hat, w_std_all, w_rms, score, df = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
+	y_hat2, w_std_all, w_rms2, score2, df2 = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
+
+	# Model 4 #
+	fwhm_bis 	= np.vstack((fwhm_daily, bis_daily)).T
+	from sklearn.preprocessing import StandardScaler
+	scaler 		= StandardScaler()
+	fwhm_bis 	= scaler.fit_transform(fwhm_bis)
+	efwhm_bis 	= np.vstack((efwhm_daily/np.std(fwhm_daily), ebis_daily/np.std(bis_daily))).T
+	y_hat4, w_std_all, w_rms4, score4, df4 = mlr(fwhm_bis, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
+
+	# Model 5 #
+	k_feature 		= fwhm_bis.shape[1]
+	short_variation = np.zeros((k_feature, fwhm_bis.shape[0]))
+	long_variation 	= np.zeros((k_feature, fwhm_bis.shape[0]))
+
+	for i in range(k_feature):
+		_, short_variation[i,:], long_variation[i,:] = long_short_divide(
+			x=bjd_daily, y=fwhm_bis[:,i], yerr=efwhm_bis[:,i], r=100)
+
+	feature_matrix = np.vstack([short_variation, long_variation]).T #(567,4)
+	y_hat5, w_std_all, w_rms5, score5, df5 = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
 
 
 	#---------------------------------------------------------------------------------#
@@ -1005,15 +1011,12 @@ for k_max in (np.arange(15)+5):
 	bjd_daily 		= np.loadtxt('bjd_daily.txt')
 	idx_bjd 		= bjd_daily<58100
 	bjd_daily_part 	= bjd_daily[idx_bjd]
-	decimal  		= np.median(bjd_daily - [int(bjd_daily[i]) for i in np.arange(len(bjd_daily))])
-	bjd_int 		= np.arange(int(min(bjd_daily)), int(max(bjd_daily))) + decimal
+	decimal  		= np.median(bjd_daily_part - [int(bjd_daily_part[i]) for i in np.arange(len(bjd_daily_part))])
+	bjd_int 		= np.arange(int(min(bjd_daily_part)), int(max(bjd_daily_part))) + decimal
 	f 				= interp1d(bjd_daily, rv_daily, fill_value='extrapolate')
 	rv_daily_int 	= f(bjd_int)
 	f 				= interp1d(bjd_daily, erv_daily, fill_value='extrapolate')
 	erv_daily_int	= f(bjd_int)
-
-
-y_hat, w_std_all, w_rms, score, variance_matrix = mlr(feature_matrix_int_lag, target_vector=rv_daily_int_lag, etarget_vector=erv_daily_int[day:-day])
 
 
 	for iday in range(5):
@@ -1026,10 +1029,6 @@ y_hat, w_std_all, w_rms, score, variance_matrix = mlr(feature_matrix_int_lag, ta
 		for i in range(k_feature2):
 			f = interp1d(bjd_daily, feature_matrix[:,i],fill_value='extrapolate')
 			feature_matrix_int[:,i] = f(bjd_int)
-
-		# plt.plot(bjd_daily_all, rv_daily, '-', alpha=0.2)
-		# plt.plot(bjd_int, rv_daily_int, '.', alpha=0.5)
-		# plt.show()
 		
 		rv_daily_int_lag = rv_daily_int[day:-day]
 
@@ -1040,7 +1039,13 @@ y_hat, w_std_all, w_rms, score, variance_matrix = mlr(feature_matrix_int_lag, ta
 				feature_matrix_int_lag[n, (k_feature*i):(k_feature*i+k_feature)] = feature_matrix_int[n+i, 0:k_feature] #(835,6)
 		feature_matrix_int_lag[:,k_feature*(2*day+1):] = feature_matrix_int[day:-day, k_feature:]
 
-		y_hat, w_std_all, w_rms, score, variance_matrix = mlr(feature_matrix_int_lag, target_vector=rv_daily_int_lag, etarget_vector=erv_daily_int[day:-day])
+		y_hat3, w_std_all3, w_rms, score, variance_matrix3 = mlr(feature_matrix_int_lag, target_vector=rv_daily_int_lag, etarget_vector=erv_daily_int[day:-day])
+		imshow_matrix(variance_matrix3, file_name='fiesta_multi_coef')
+
+		# FWHM-BIS L and S
+		y_hat6, w_std_all6, w_rms, score, variance_matrix6 = mlr(feature_matrix_int_lag, target_vector=rv_daily_int_lag, etarget_vector=erv_daily_int[day:-day], feature_matrix2=feature_matrix)
+		imshow_matrix(variance_matrix6, file_name='fwhm_bis_multi_coef') # not working? 
+		
 
 		imshow_matrix(coeff_array, file_name='lasso_coef')
 		imshow_matrix(variance_matrix, file_name='significance_coef')
@@ -1063,11 +1068,19 @@ ax_histx = fig.add_subplot(gs[0, 0], sharex=ax)
 ax_histy = fig.add_subplot(gs[1, 1], sharey=ax)
 
 # use the previously defined function
-scatter_hist(res1, res2, ax, ax_histx, ax_histy)
+res1 = y_hat1-rv_daily_int[day:-day]
+res2 = y_hat2-rv_daily_int[day:-day]
+
+scatter_hist(res1, res2, erv_daily_int[day:-day], erv_daily_int[day:-day], ax, ax_histx, ax_histy)
 
 plt.savefig('scatter_histogram.png')
 plt.show()
 
+if 0:
+	plt.plot(y_hat1-rv_daily_int[day:-day], y_hat2-rv_daily_int[day:-day], '.')
+	plt.show()
+	_ = plt.hist(y_hat1-y_hat2, bins=20)
+	plt.show()
 
 
 
@@ -1081,7 +1094,6 @@ plt.show()
 		bjd_daily = np.loadtxt('bjd_daily.txt')
 
 		fwhm_bis = np.vstack((fwhm_daily, bis_daily)).T
-		from sklearn.preprocessing import StandardScaler
 		scaler = StandardScaler()
 		fwhm_bis = scaler.fit_transform(fwhm_bis)
 		efwhm_bis = np.vstack((efwhm_daily/np.std(fwhm_daily), ebis_daily/np.std(bis_daily))).T  
@@ -1097,12 +1109,8 @@ plt.show()
 				x_fwhm_bis_int_lag[n, (2*i):(2*i+2)] = x_fwhm_bis_int[n+i, 0:2]
 
 		rv_daily_int_lag = rv_daily_int[day:-day]
+		
 		lasso = Lasso(alpha=alpha, max_iter=10000).fit(x_fwhm_bis_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
-
-		y_hat 			= lasso.predict(x_fwhm_bis_int_lag)
-		_, w_std_all 	= weighted_avg_and_std(rv_daily_int, 1/erv_daily_int**2)
-		_, w_rms 		= weighted_avg_and_std((y_hat - rv_daily_int_lag), weights=1/erv_daily_int[day:-day]**2)
-		score 			= lasso.score(x_fwhm_bis_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
 
 		coeff_matrix = np.zeros((day*2+1, 2))
 		for i in range(day*2+1):
@@ -1118,7 +1126,7 @@ plt.show()
 		variance_matrix = variance_matrix**2
 		variance_matrix = variance_matrix / variance_matrix.sum() * 100
 
-		imshow_matrix(variance_matrix, file_name='fwhm_bis_coef')
+		imshow_matrix(variance_matrix, file_name='fwhm_bis_coef') # ax.set_yticklabels(['FWHM', 'BIS'])
 
 	# -----------------------
 
@@ -1189,8 +1197,8 @@ plt.show()
 		score 			= lasso.score(feature_matrix_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
 
 		import pandas as pd 
-		w_std = np.zeros(4)
-		for i in range(4):
+		w_std = np.zeros(feature_matrix.shape[1])
+		for i in range(len(w_std)):
 			_, w_std[i] = weighted_avg_and_std(feature_matrix_int[day:-day,i], 1/erv_daily_int[day:-day]**2)
 
 		coeff_array24 = coeff_array
@@ -1205,30 +1213,19 @@ plt.show()
 		variance_matrix = variance_matrix**2
 		variance_matrix = variance_matrix / variance_matrix.sum() * 100
 
-		imshow_matrix(variance_matrix, file_name='fwhm_bis_multi_coef')
+		imshow_matrix(variance_matrix, file_name='fiesta_multi_coef')	# wroking too! finally
+		imshow_matrix(variance_matrix, file_name='fwhm_bis_multi_coef') # working for fwhm and bis
 
 
 	#---------------------------#
-	# Multiple Regression Model with multidays 
+	# No short and long devide!
 	#---------------------------#
-
-
-	bjd_daily_all 	= bjd_daily	
-	idx_bjd 		= bjd_daily_all<58100
-	bjd_daily 		= bjd_daily_all[idx_bjd]
-
-	n_int 			= len(bjd_daily)
-	decimal  		= np.median(bjd_daily - [int(bjd_daily[i]) for i in np.arange(n_int)])
-	bjd_int 		= np.arange(int(min(bjd_daily)), int(max(bjd_daily))) + decimal
-	f 				= interp1d(bjd_daily_all, rv_daily, fill_value='extrapolate')
-	rv_daily_int 	= f(bjd_int)
 
 	n_pca = 3
 	feature_matrix_int = np.zeros((len(bjd_int), n_pca))
 	for i in range(n_pca):
 		f = interp1d(bjd_daily, my_pca_score[idx_bjd,i],fill_value='extrapolate')
 		feature_matrix_int[:,i] = f(bjd_int)
-
 
 	for iday in range(5):
 		day = iday+3
@@ -1240,14 +1237,6 @@ plt.show()
 		for n in range(len(rv_daily_int[day:-day])):
 			for i in range((2*day+1)):
 				feature_matrix_int_lag[n, (n_pca*i):(n_pca*i+n_pca)] = feature_matrix_int[n+i, 0:n_pca]
-
-		from sklearn import linear_model
-		regr = linear_model.LinearRegression()
-		from sklearn.model_selection import cross_val_score
-		import seaborn as sns
-
-		from sklearn.model_selection import train_test_split
-		from sklearn.linear_model import Lasso
 
 		alpha = 0.05
 		lasso = Lasso(alpha=alpha, max_iter=10000).fit(feature_matrix_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
@@ -2702,7 +2691,6 @@ if 1:
 
 
 	train_x, test_x, train_y, test_y = train_test_split(feature_matrix_int_lag, rv_daily_int_lag, test_size=0.3, random_state=42)
-	# train_x, test_x, train_y, test_y = train_test_split(x_fwhm_bis_int_lag, rv_daily_int_lag, test_size=0.3, random_state=40) #new
 
 	regr.fit (train_x, train_y)
 	# The coefficients
@@ -2720,52 +2708,6 @@ if 1:
 	plt.savefig('pca_linear_reg_3days.png')
 	plt.show()
 	# plt.close('all')
-
-	coeff_array = np.zeros((2*day+1,n_pca))
-	for i in range(2*day+1):
-		coeff_array[i, :] = regr.coef_[i*n_pca:i*n_pca+n_pca]
-
-
-	coeff_array_lin = coeff_array
-
-
-	# meshplot
-	x = np.arange(7)-3
-	y = np.arange(n_pca)+1
-
-	# when layering multiple images, the images need to have the same
-	# extent.  This does not mean they need to have the same shape, but
-	# they both need to render to the same coordinate system determined by
-	# xmin, xmax, ymin, ymax.  Note if you use different interpolations
-	# for the images their apparent extent could be different due to
-	# interpolation edge effects
-	from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-	extent = np.min(x), np.max(x), np.min(y), np.max(y)
-	fig = plt.figure(frameon=False)
-	plt.title('regr.coef_')
-	plt.xlabel('lag [days]')
-	plt.ylabel('PCA')
-	ax = plt.gca()
-
-	im2 = plt.imshow(np.transpose(coeff_array), cmap=plt.cm.viridis, alpha=.9)
-
-	ax.set_xticks(np.arange(len(x)))
-	ax.set_yticks(np.arange(len(y)))
-	# ... and label them with the respective list entries
-	ax.set_xticklabels(x)
-	ax.set_yticklabels(y)
-
-
-	divider = make_axes_locatable(ax)
-	cax = divider.append_axes("right", size="5%", pad=0.05)
-
-	plt.colorbar(im2, cax=cax)
-	# plt.savefig('regr_coef_.png')	
-	# plt.savefig('lasso_coef_.png')	
-
-	plt.show()
-
 
 
 

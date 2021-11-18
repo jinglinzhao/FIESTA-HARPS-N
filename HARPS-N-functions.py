@@ -321,7 +321,7 @@ def imshow_matrix(coeff_array, file_name):
 		ax.set_yticklabels(['S-FWHM', 'S-BIS', 'L-FWHM', 'L-BIS'])
 	if file_name == 'pca_coef':	
 		ax.set_yticklabels([r'PC$_1$', r'PC$_2$', r'PC$_3$'])	
-	else:
+	if file_name == 'fiesta_multi_coef':
 		ax.set_yticklabels([r'S-PC$_1$', r'S-PC$_2$', r'S-PC$_3$', r'L-PC$_1$', r'L-PC$_2$', r'L-PC$_3$'])
 
 	divider = make_axes_locatable(ax)
@@ -330,12 +330,12 @@ def imshow_matrix(coeff_array, file_name):
 	plt.colorbar(im2, cax=cax) 
 	plt.savefig(file_name + '_{:.2f}_{:d}_{:d}'.format(alpha, day, k_max) +'.png')
 
-	plt.close
+	plt.close()
 
 #------------------------------------------------------#
 #------------------------------------------------------#
 
-def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True'):
+def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', feature_matrix2=None):
 
 	'''
 		Multiple linear regression
@@ -361,8 +361,10 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True'):
 
 	w_std = np.zeros(k_feature2)
 	for i in range(len(w_std)):
-		_, w_std[i] = weighted_avg_and_std(feature_matrix[:,i], 1/etarget_vector**2)
-
+		if lag!='True':
+			_, w_std[i] = weighted_avg_and_std(feature_matrix[:,i], 1/etarget_vector**2)
+		else:
+			_, w_std[i] = weighted_avg_and_std(feature_matrix2[:,i], 1/erv_daily**2)
 	print('Weighted rms is reduced from {:.2f} to {:.2f}; \nPearson correlation coefficient = {:.2f}.'
 			.format(w_std_all, w_rms, score))
 
@@ -382,7 +384,7 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True'):
 		
 		return y_hat, w_std_all, w_rms, score, df
 
-	else:
+	else: # maybe problematic!!!
 
 		coeff_matrix = np.zeros((day*2+1, k_feature2))
 		for i in range(k_feature):
@@ -394,9 +396,73 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True'):
 			variance_matrix[i,:] = coeff_matrix[i,:]*w_std
 		variance_matrix = variance_matrix**2
 		variance_matrix = variance_matrix / variance_matrix.sum() * 100
-		
 
 		return y_hat, w_std_all, w_rms, score, variance_matrix
+
+#------------------------------------------------------#
+#------------------------------------------------------#
+
+def long_short_divide(x, y, yerr, r):
+	'''
+	x 		= bjd_daily
+	y 		= shift_function[i,:]
+	yerr 	= err_shift_spectrum[i,:]
+	'''
+
+	import george
+	from george import kernels
+
+	kernel 	= np.var(y) * kernels.Matern52Kernel(r**2)
+	gp 		= george.GP(kernel)
+	gp.compute(x, yerr)
+
+	y_pred, _ 	= gp.predict(y, x, return_var=True)
+	long_term 	= y_pred
+	short_term 	= y - y_pred
+
+	return gp, short_term, long_term
+
+#------------------------------------------------------#
+#------------------------------------------------------#
+
+def scatter_hist(x, y, xerr, yerr, ax, ax_histx, ax_histy):
+    # no labels
+    ax_histx.tick_params(axis="x", labelbottom=False)
+    ax_histy.tick_params(axis="y", labelleft=False)
+
+    # the scatter plot:
+    ax.errorbar(x, y, xerr, yerr, c='black', marker='o', ls='none', alpha=0.2)
+    ax.set_xlabel('Model 3 residual [m/s]')
+    ax.set_ylabel('Model 6 residual [m/s]')
+
+    # now determine nice limits by hand:
+    binwidth = 0.25
+    xymax = max(np.max(np.abs(x)), np.max(np.abs(y)))
+    lim = (int(xymax/binwidth) + 1) * binwidth
+
+    bins = np.arange(-lim, lim + binwidth, binwidth)
+    ax_histx.hist(x, bins=bins, color='black', alpha=0.5)
+    ax_histy.hist(y, bins=bins, orientation='horizontal', color='black', alpha=0.5)
+
+
+
+
+
+
+
+
+
+
+
+
+plt.scatter(x,x, alpha=0.3)
+plt.show()
+
+
+
+
+
+
 
 
 

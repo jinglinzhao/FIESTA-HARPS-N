@@ -361,10 +361,10 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', f
 
 	w_std = np.zeros(k_feature2)
 	for i in range(len(w_std)):
-		if lag!='True':
-			_, w_std[i] = weighted_avg_and_std(feature_matrix[:,i], 1/etarget_vector**2)
+		if lag=='True':
+			_, w_std[i] = weighted_avg_and_std(feature_matrix2[:,i], 1/etarget_vector**2)
 		else:
-			_, w_std[i] = weighted_avg_and_std(feature_matrix2[:,i], 1/erv_daily**2)
+			_, w_std[i] = weighted_avg_and_std(feature_matrix[:,i], 1/etarget_vector**2)
 	print('Weighted rms is reduced from {:.2f} to {:.2f}; \nPearson correlation coefficient = {:.2f}.'
 			.format(w_std_all, w_rms, score))
 
@@ -392,7 +392,7 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', f
 		coeff_matrix[day,k_feature:]=lasso.coef_[k_feature*(2*day+1):]
 
 		variance_matrix = np.zeros(coeff_matrix.shape)
-		for i in range(k_feature2):
+		for i in range(day*2+1):
 			variance_matrix[i,:] = coeff_matrix[i,:]*w_std
 		variance_matrix = variance_matrix**2
 		variance_matrix = variance_matrix / variance_matrix.sum() * 100

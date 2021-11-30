@@ -1025,6 +1025,7 @@ for k_max in (np.arange(15)+5):
 	idx_bjd 		= bjd_daily<58100
 	bjd_daily_part1 = bjd_daily[idx_bjd]
 	bjd_daily_part2 = bjd_daily[~idx_bjd]
+<<<<<<< HEAD
 
 	t1_min = min(bjd_daily_part1) 	#= 57233.05440362564
 	t1_max = max(bjd_daily_part1)	#= 58068.0739790099
@@ -1099,6 +1100,81 @@ for k_max in (np.arange(15)+5):
 	if 0:
 		plt.plot(y_hat1-rv_daily_int[day:-day], y_hat2-rv_daily_int[day:-day], '.')
 		plt.show()
+=======
+
+	t1_min = min(bjd_daily_part1) 	#= 57233.05440362564
+	t1_max = max(bjd_daily_part1)	#= 58068.0739790099
+	t2_min = min(bjd_daily_part2) 	#= 58163.022739323365
+	t2_max = max(bjd_daily_part2) 	#= 58315.979416495415
+
+	bjd_daily_lag1 	= bjd_daily_part1[(bjd_daily_part1>=t1_min+day-0.3) & (bjd_daily_part1<=t1_max-day+0.3)]
+	bjd_daily_lag2 	= bjd_daily_part2[(bjd_daily_part2>=t2_min+day-0.3) & (bjd_daily_part2<=t2_max-day+0.3)]
+
+	bjd_daily_lag 	= np.hstack((bjd_daily_lag1, bjd_daily_lag2))
+
+	k_feature2 	= feature_matrix.shape[1]
+	k_feature 	= int(k_feature2/2)
+	feature_matrix_int_lag 	= np.zeros((len(bjd_daily_lag), k_feature2*(day+1)))
+	
+	for i in range((2*day+1)):	
+		for j in range(k_feature):
+			# f = interp1d(bjd_daily, feature_matrix[:,j], fill_value='extrapolate')
+			# feature_matrix_int_lag[:, k_feature*i+j] = f(bjd_daily_lag-day+i)
+
+			cs = CubicSpline(bjd_daily, feature_matrix[:,j], extrapolate=True)
+			feature_matrix_int_lag[:, k_feature*i+j] = cs(bjd_daily_lag-day+i)
+
+	index = ((bjd_daily>=t1_min+day-0.3) & (bjd_daily<=t1_max-day+0.3)) \
+	| ((bjd_daily>=t2_min+day-0.3) & (bjd_daily<=t2_max-day+0.3))
+	
+	feature_matrix_int_lag[:,k_feature*(2*day+1):] = feature_matrix[index, k_feature:]
+
+	y_hat3, w_std_all3, w_rms, score, variance_matrix3 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
+	imshow_matrix(variance_matrix3, file_name='fiesta_multi_coef') # working :) 
+
+	y_hat6, w_std_all6, w_rms, score, variance_matrix6 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
+	imshow_matrix(variance_matrix6, file_name='fwhm_bis_multi_coef') 
+
+	if 0: # test 
+		for i in range(11):
+			plt.plot(bjd_daily_lag, feature_matrix_int_lag[:,i*3], '.', alpha=0.5)
+			plt.plot(bjd_daily_lag, feature_matrix_int_lag[:,i*3], '-', alpha=0.2)	
+		plt.savefig('test.png')
+		plt.show()
+
+		plt.plot(bjd_daily_lag, y_hat3 - rv_daily[index], '.')
+		plt.title('residual')
+		plt.show()
+
+	#---------------------------------------------------------------------------------#
+	# Compare the performance of two models
+	#---------------------------------------------------------------------------------#
+	# start with a square Figure
+	fig = plt.figure(figsize=(8, 8))
+
+	# Add a gridspec with two rows and two columns and a ratio of 2 to 7 between
+	# the size of the marginal axes and the main axes in both directions.
+	# Also adjust the subplot parameters for a square plot.
+	gs = fig.add_gridspec(2, 2,  width_ratios=(7, 2), height_ratios=(2, 7),
+	                      left=0.1, right=0.9, bottom=0.1, top=0.9,
+	                      wspace=0.05, hspace=0.05)
+
+	ax = fig.add_subplot(gs[1, 0])
+	ax_histx = fig.add_subplot(gs[0, 0], sharex=ax)
+	ax_histy = fig.add_subplot(gs[1, 1], sharey=ax)
+
+	# use the previously defined function
+	res1 = y_hat1-rv_daily_int[day:-day]
+	res2 = y_hat2-rv_daily_int[day:-day]
+
+	scatter_hist(res1, res2, erv_daily_int[day:-day], erv_daily_int[day:-day], ax, ax_histx, ax_histy)
+
+	plt.savefig('scatter_histogram.png')
+	plt.show()
+
+	if 0:
+		plt.plot(y_hat1-rv_daily_int[day:-day], y_hat2-rv_daily_int[day:-day], '.')
+		plt.show()
 
 		_ = plt.hist(y_hat1-y_hat2, bins=20, color='black', alpha=0.5)
 		plt.xlabel('Model 3 - Model 6 [m/s]')
@@ -1106,6 +1182,60 @@ for k_max in (np.arange(15)+5):
 		plt.show()
 
 	np.percentile(y_hat1-y_hat2, 75) - np.percentile(y_hat1-y_hat2, 25)
+>>>>>>> 6d94324e434f9f91ee1b557918fc0182432b9c1d
+
+		_ = plt.hist(y_hat1-y_hat2, bins=20, color='black', alpha=0.5)
+		plt.xlabel('Model 3 - Model 6 [m/s]')
+		plt.savefig('model_comparison_histogram.png')
+		plt.show()
+
+<<<<<<< HEAD
+	np.percentile(y_hat1-y_hat2, 75) - np.percentile(y_hat1-y_hat2, 25)
+=======
+
+	# -----------------------
+	# fwhm_bis with lags 
+	# -----------------------
+	for iday in range(5):
+		day = iday+3
+		
+		bjd_daily = np.loadtxt('bjd_daily.txt')
+
+		fwhm_bis = np.vstack((fwhm_daily, bis_daily)).T
+		scaler = StandardScaler()
+		fwhm_bis = scaler.fit_transform(fwhm_bis)
+		efwhm_bis = np.vstack((efwhm_daily/np.std(fwhm_daily), ebis_daily/np.std(bis_daily))).T  
+
+		x_fwhm_bis_int = np.zeros((len(bjd_int), 2))
+		for i in range(2):
+			f = interp1d(bjd_daily, fwhm_bis[:,i], fill_value='extrapolate')
+			x_fwhm_bis_int[:,i] = f(bjd_int)
+
+		x_fwhm_bis_int_lag = np.zeros((len(rv_daily_int[day:-day]), 2*(2*day+1)))
+		for n in range(len(rv_daily_int[day:-day])): #new
+			for i in range((2*day+1)):
+				x_fwhm_bis_int_lag[n, (2*i):(2*i+2)] = x_fwhm_bis_int[n+i, 0:2]
+
+		rv_daily_int_lag = rv_daily_int[day:-day]
+
+		lasso = Lasso(alpha=alpha, max_iter=10000).fit(x_fwhm_bis_int_lag, rv_daily_int_lag, sample_weight=1/erv_daily_int[day:-day]**2)
+
+		coeff_matrix = np.zeros((day*2+1, 2))
+		for i in range(day*2+1):
+			coeff_matrix[i, :] = lasso.coef_[(i*2):(i*2+2)]
+
+		w_std = np.zeros(2)
+		for i in range(2):
+			_, w_std[i] = weighted_avg_and_std(x_fwhm_bis_int[day:-day,i], 1/erv_daily_int[day:-day]**2)
+
+		variance_matrix = np.zeros(coeff_matrix.shape)
+		for i in range(coeff_matrix.shape[0]):
+			variance_matrix[i,:] = coeff_matrix[i,:]*w_std
+		variance_matrix = variance_matrix**2
+		variance_matrix = variance_matrix / variance_matrix.sum() * 100
+
+		imshow_matrix(variance_matrix, file_name='fwhm_bis_coef') # ax.set_yticklabels(['FWHM', 'BIS'])
+>>>>>>> 6d94324e434f9f91ee1b557918fc0182432b9c1d
 
 	# -----------------------
 

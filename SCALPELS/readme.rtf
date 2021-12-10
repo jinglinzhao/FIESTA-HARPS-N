@@ -1,0 +1,57 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2636
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;\red255\green255\blue255;\red33\green89\blue153;}
+{\*\expandedcolortbl;;\cssrgb\c100000\c100000\c100000;\cssrgb\c16078\c43137\c66667;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww18880\viewh21600\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs48 \cf0 The attached code files underpin the publication \
+\
+\'93\expnd0\expndtw0\kerning0
+Separating planetary reflex Doppler shifts from stellar variability in the \'a0wavelength domain\'94, accepted 2 May 2021 for publication in MNRAS.\
+\
+The main file is the self-documenting Jupyter notebook SCALPELS_Solar_MNRAS.ipynb.\
+A human-readable version of the file SCALPELS_Solar_MNRAS.html may be viewed in any browser.\
+\
+\pard\pardeftab720\partightenfactor0
+\cf0 \cb2 This notebook generates all figures and tables published in Collier Cameron et al 2021, {\field{\*\fldinst{HYPERLINK "http://arxiv.org/abs/2011.00018"}}{\fldrslt \cf3 \ul \ulc3 http://arxiv.org/abs/2011.00018}}\cb1 \
+\cb2 \
+The dataset on which it operates is contained in the pickle file 'CCFdata_daily_15min.pkl' which may be accessed at {\field{\*\fldinst{HYPERLINK "https://doi.org/10.17630/9ec51274-cbea-445f-b188-112f4734c6e9"}}{\fldrslt \cf3 \ul \ulc3 https://doi.org/10.17630/9ec51274-cbea-445f-b188-112f4734c6e9}} .\cb1 \
+\cb2 \
+To run this notebook ... Install an up-to-date version python3 (version 3.7 or later), e.g., {\field{\*\fldinst{HYPERLINK "https://www.anaconda.com/distribution/"}}{\fldrslt \cf3 \ul \ulc3 https://www.anaconda.com/distribution/}}\cb1 \
+\cb2 \
+The notebook uses routines from the numpy, matplotlib, and pickle packages.\cb1 \
+\cb2 \
+It also uses function definitions from the scalpels_public.py and pyBGLS.py packages supplied with this notebook. All PDF output from the notebook is written\
+to files in the folder CCFdata_daily_15min.\cb1 \
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 \
+All data used in the paper are contained in a single file \kerning1\expnd0\expndtw0 CCFdata_daily_15min.pkl\expnd0\expndtw0\kerning0
+ in python pickle format. It may be unpacked into arrays using the command:\
+\
+import pickle\
+with open(\'91\kerning1\expnd0\expndtw0 CCFdata_daily_15min.pkl\'92\expnd0\expndtw0\kerning0
+,\'92rb') as ccfile:\
+    ccfpkl,errpkl,badpkl,bjdpkl,rvbpkl,rvhpkl,rvepkl,bervpkl,sn60pkl,qualpkl,vcorpkl,btohpkl,vel = pickle.load(ccfile)\
+\
+The arrays contain the following information:\
+\
+ccfpkl	2d real array, dimension nrow x ncol. Each row contains a single cross-correlation function (CCF)\
+errpkl	2d real array, dimension nrow x ncol. Each row contains CCF uncertainties in same units as CCF.\
+badpkl	2d integer array, dimension nrow x ncol. Each row contains bad-data flags. 0 denotes good data.\
+bjdpkl	1d real array, dimension nrow. Barycentric julian date at mid-observation.\
+rvbpkl	1d real array, dimension nrow. HARPS-N DRS barycentric radial velocity in km/s.\
+rvhpkl	1d real array, dimension nrow. HARPS-N DRS heliocentric radial velocity in km/s.\
+rvepkl	1d real array, dimension nrow. HARPS-N DRS uncertainty in radial velocity in km/s.\
+bervpkl	1d real array, dimension nrow. HARPS-N DRS correction to instrumental radial velocity in km/s for observer motion relative to solar system barycentre.\
+sn60pkl	1d real array, dimension nrow. HARPS-N DRS signal-to-noise ratio of extracted spectrum in order 60.\
+qualpkl	1d real array, dimension nrow. Probability that data are unaffected by partial cloud obcuration of solar disc (1=good).\
+vcorpkl	1d real array, dimension nrow. Correction to be added to HARPS-N DRS velocity to correct for differential extinction.\
+btohpkl	1d real array, dimension nrow. Correction to be added to barycentric velocity to obtain heliocentric velocity.\
+vel		1d real array, dimension nvel. Velocity in km/s at the centre of each CCF column.\
+\
+Note that these data are pre-selected to include only times of day when vcorpkl is less than 10^-4 km/s (10 cm/s), so\
+the correction is neither needed nor applied in the accompanying code.\
+\
+\
+}

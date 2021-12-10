@@ -59,7 +59,7 @@ for i in range(ft.size):
 # plots 
 #--------------------------------------------------------------------
 
-plt.rcParams.update({'font.size': 10})
+plt.rcParams.update({'font.size': 12})
 colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
               '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
               '#bcbd22', '#17becf']
@@ -76,7 +76,9 @@ plt.show()
 
 k_max = 6
 
+plt.rcParams.update({'font.size': 14})
 plt.subplots(figsize=(10, k_max))
+plt.gcf().subplots_adjust(wspace=0.35)
 
 for i in range(k_max):
 
@@ -87,7 +89,7 @@ for i in range(k_max):
     	plt.plot(V_grid, res[i,:] - res[i-1,:], 'k-')
     plt.ylabel(r'$k$=%d' %(i))
     if i == 0:
-        plt.title('Basis function')
+        plt.title('Basis functions')
 
     if i!=k_max-1:
         ax.set_xticks([])
@@ -104,21 +106,8 @@ for i in range(k_max):
     else:
         plt.xlabel('V grid [km/s]')
 
-plt.savefig('FIESTA_demo.png')
+plt.savefig('FIESTA_demo.pdf')
 plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -126,7 +115,8 @@ plt.show()
 # https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.secondary_yaxis.html#matplotlib.axes.Axes.secondary_yaxis
 # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/secondary_axis.html
 
-fig, ax = plt.subplots()
+plt.rcParams.update({'font.size': 14})
+fig, ax = plt.subplots(figsize=(10, k_max))
 
 def SNR(x):
 	return np.median(1-CCF)/x
@@ -142,7 +132,7 @@ for i in range(freq.size-1):
 	ax.grid(b=True, which='both')
 	secax = ax.secondary_yaxis('right', functions=(SNR, inverse))	
 	secax.set_ylabel('SNR')
-plt.savefig('Flux_residual_rms.png')
+plt.savefig('Flux_residual_rms.pdf')
 plt.show()
 
 

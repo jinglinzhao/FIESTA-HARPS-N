@@ -12,6 +12,7 @@ import copy
 import sys
 sys.path.append("../")
 from FIESTA_functions import *
+from HARPS_N_functions import *
 # import FIESTA_functions from the directory above 
 # https://gist.github.com/MRobertEvers/55a989b4883ea8d7715d2e156627f034
 
@@ -653,6 +654,41 @@ fwhm_daily = np.loadtxt('fwhm_daily.txt')
 ebis_daily = np.loadtxt('ebis_daily.txt')
 efwhm_daily = np.loadtxt('efwhm_daily.txt')
 
+# read from the 5 years solar data
+import pickle
+with open('./SCALPELS/CCFdata_daily_15min.pkl','rb') as ccfile:
+    ccfpkl,errpkl,badpkl,bjdpkl,rvbpkl,rvhpkl,rvepkl,bervpkl,sn60pkl,qualpkl,vcorpkl,btohpkl,vel = pickle.load(ccfile)
+
+# Plot the RVs 
+plt.rcParams.update({'font.size': 14})
+alpha=0.5
+colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
+              '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
+              '#bcbd22', '#17becf']
+
+fig, axes = plt.subplots(figsize=(15, 3))
+plt.gcf().subplots_adjust(bottom=0.2)
+plt.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, c='purple', marker='o', ls='none', alpha= 0.3, label='3 years RV')
+plt.errorbar(bjdpkl[rowmask]-2400000 , (rvhpkl[rowmask]-np.mean(rvhpkl[rowmask]))*1000+10, rvepkl[rowmask]*1000, c='black', marker='o', ls='none', alpha= 0.3, label='5 years RV')
+plt.legend()
+plt.xlabel('BJD - 2400000 [d]')
+plt.ylabel('RV [m/s]')
+plt.savefig('rv_daily.pdf')
+plt.show()
+
+# some statistics 
+if 0:
+	bjdpkl = bjdpkl-2400000
+	len(bjdpkl[rowmask][bjdpkl[rowmask]<58100]) #431
+	len(bjd_daily[bjd_daily<58100]) #469
+
+# change the parameter names 
+rowmask		= np.load('./SCALPELS/rowmask.npy')
+CCF_daily 	= ccfpkl[rowmask,:].T
+eCCF_daily 	= errpkl[rowmask,:].T
+bjd_daily 	= bjdpkl[rowmask]
+rv_daily 	= rvhpkl[rowmask]
+
 
 # normality tests
 if 0:
@@ -798,7 +834,7 @@ for k_max in (np.arange(15)+5):
 	# long_variation 	= np.zeros(shift_spectrum.shape)
 
 	for i in range(shift_spectrum.shape[0]):
-		shift_function[i,:] = shift_spectrum[i,:] - rv_raw_daily
+		shift_function[i,:] = shift_spectrum[i,:] - rv_raw_daily # look back; change rv_raw_daily
 
 		# _, short_variation[i,:], long_variation[i,:] = long_short_divide(
 		# 	x=bjd_daily, y=shift_function[i,:], yerr=err_shift_spectrum[i,:], r=100)
@@ -1025,7 +1061,6 @@ for k_max in (np.arange(15)+5):
 	idx_bjd 		= bjd_daily<58100
 	bjd_daily_part1 = bjd_daily[idx_bjd]
 	bjd_daily_part2 = bjd_daily[~idx_bjd]
-<<<<<<< HEAD
 
 	t1_min = min(bjd_daily_part1) 	#= 57233.05440362564
 	t1_max = max(bjd_daily_part1)	#= 58068.0739790099
@@ -1071,80 +1106,7 @@ for k_max in (np.arange(15)+5):
 		plt.title('residual')
 		plt.show()
 
-	#---------------------------------------------------------------------------------#
-	# Compare the performance of two models
-	#---------------------------------------------------------------------------------#
-	# start with a square Figure
-	fig = plt.figure(figsize=(8, 8))
 
-	# Add a gridspec with two rows and two columns and a ratio of 2 to 7 between
-	# the size of the marginal axes and the main axes in both directions.
-	# Also adjust the subplot parameters for a square plot.
-	gs = fig.add_gridspec(2, 2,  width_ratios=(7, 2), height_ratios=(2, 7),
-	                      left=0.1, right=0.9, bottom=0.1, top=0.9,
-	                      wspace=0.05, hspace=0.05)
-
-	ax = fig.add_subplot(gs[1, 0])
-	ax_histx = fig.add_subplot(gs[0, 0], sharex=ax)
-	ax_histy = fig.add_subplot(gs[1, 1], sharey=ax)
-
-	# use the previously defined function
-	res1 = y_hat1-rv_daily_int[day:-day]
-	res2 = y_hat2-rv_daily_int[day:-day]
-
-	scatter_hist(res1, res2, erv_daily_int[day:-day], erv_daily_int[day:-day], ax, ax_histx, ax_histy)
-	# needs attention!
-	plt.savefig('scatter_histogram.png')
-	plt.show()
-
-	if 0:
-		plt.plot(y_hat1-rv_daily_int[day:-day], y_hat2-rv_daily_int[day:-day], '.')
-		plt.show()
-=======
-
-	t1_min = min(bjd_daily_part1) 	#= 57233.05440362564
-	t1_max = max(bjd_daily_part1)	#= 58068.0739790099
-	t2_min = min(bjd_daily_part2) 	#= 58163.022739323365
-	t2_max = max(bjd_daily_part2) 	#= 58315.979416495415
-
-	bjd_daily_lag1 	= bjd_daily_part1[(bjd_daily_part1>=t1_min+day-0.3) & (bjd_daily_part1<=t1_max-day+0.3)]
-	bjd_daily_lag2 	= bjd_daily_part2[(bjd_daily_part2>=t2_min+day-0.3) & (bjd_daily_part2<=t2_max-day+0.3)]
-
-	bjd_daily_lag 	= np.hstack((bjd_daily_lag1, bjd_daily_lag2))
-
-	k_feature2 	= feature_matrix.shape[1]
-	k_feature 	= int(k_feature2/2)
-	feature_matrix_int_lag 	= np.zeros((len(bjd_daily_lag), k_feature2*(day+1)))
-	
-	for i in range((2*day+1)):	
-		for j in range(k_feature):
-			# f = interp1d(bjd_daily, feature_matrix[:,j], fill_value='extrapolate')
-			# feature_matrix_int_lag[:, k_feature*i+j] = f(bjd_daily_lag-day+i)
-
-			cs = CubicSpline(bjd_daily, feature_matrix[:,j], extrapolate=True)
-			feature_matrix_int_lag[:, k_feature*i+j] = cs(bjd_daily_lag-day+i)
-
-	index = ((bjd_daily>=t1_min+day-0.3) & (bjd_daily<=t1_max-day+0.3)) \
-	| ((bjd_daily>=t2_min+day-0.3) & (bjd_daily<=t2_max-day+0.3))
-	
-	feature_matrix_int_lag[:,k_feature*(2*day+1):] = feature_matrix[index, k_feature:]
-
-	y_hat3, w_std_all3, w_rms, score, variance_matrix3 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
-	imshow_matrix(variance_matrix3, file_name='fiesta_multi_coef') # working :) 
-
-	y_hat6, w_std_all6, w_rms, score, variance_matrix6 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
-	imshow_matrix(variance_matrix6, file_name='fwhm_bis_multi_coef') 
-
-	if 0: # test 
-		for i in range(11):
-			plt.plot(bjd_daily_lag, feature_matrix_int_lag[:,i*3], '.', alpha=0.5)
-			plt.plot(bjd_daily_lag, feature_matrix_int_lag[:,i*3], '-', alpha=0.2)	
-		plt.savefig('test.png')
-		plt.show()
-
-		plt.plot(bjd_daily_lag, y_hat3 - rv_daily[index], '.')
-		plt.title('residual')
-		plt.show()
 
 	#---------------------------------------------------------------------------------#
 	# Compare the performance of two models
@@ -1164,34 +1126,20 @@ for k_max in (np.arange(15)+5):
 	ax_histy = fig.add_subplot(gs[1, 1], sharey=ax)
 
 	# use the previously defined function
-	res1 = y_hat1-rv_daily_int[day:-day]
-	res2 = y_hat2-rv_daily_int[day:-day]
+	res3 = y_hat3-rv_daily[index]
+	res6 = y_hat6-rv_daily[index]
 
-	scatter_hist(res1, res2, erv_daily_int[day:-day], erv_daily_int[day:-day], ax, ax_histx, ax_histy)
+	scatter_hist(res3, res6, erv_daily[index], erv_daily[index], ax, ax_histx, ax_histy)
 
 	plt.savefig('scatter_histogram.png')
 	plt.show()
 
-	if 0:
-		plt.plot(y_hat1-rv_daily_int[day:-day], y_hat2-rv_daily_int[day:-day], '.')
-		plt.show()
+	_ = plt.hist(y_hat3-y_hat6, bins=20, color='black', alpha=0.5)
+	plt.xlabel('Model 3 - Model 6 [m/s]')
+	plt.savefig('model_comparison_histogram.png')
+	plt.show()
 
-		_ = plt.hist(y_hat1-y_hat2, bins=20, color='black', alpha=0.5)
-		plt.xlabel('Model 3 - Model 6 [m/s]')
-		plt.savefig('model_comparison_histogram.png')
-		plt.show()
-
-	np.percentile(y_hat1-y_hat2, 75) - np.percentile(y_hat1-y_hat2, 25)
->>>>>>> 6d94324e434f9f91ee1b557918fc0182432b9c1d
-
-		_ = plt.hist(y_hat1-y_hat2, bins=20, color='black', alpha=0.5)
-		plt.xlabel('Model 3 - Model 6 [m/s]')
-		plt.savefig('model_comparison_histogram.png')
-		plt.show()
-
-<<<<<<< HEAD
-	np.percentile(y_hat1-y_hat2, 75) - np.percentile(y_hat1-y_hat2, 25)
-=======
+	np.percentile(y_hat3-y_hat6, 50+34.1) - np.percentile(y_hat3-y_hat6, 50-34.1)
 
 	# -----------------------
 	# fwhm_bis with lags 
@@ -1294,7 +1242,7 @@ colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
 
 fig, axes = plt.subplots(figsize=(15, 3))
 plt.gcf().subplots_adjust(bottom=0.2)
-plt.errorbar(bjd, rv-np.mean(rv_daily), rv_err, c='black', marker='.', ls='none', alpha= 0.05, label='Unbinned RV')
+# plt.errorbar(bjd, rv-np.mean(rv_daily), rv_err, c='black', marker='.', ls='none', alpha= 0.05, label='Unbinned RV')
 plt.errorbar(bjd_daily, rv_daily-np.mean(rv_daily), erv_daily, c='purple', marker='o', ls='none', alpha= 0.5, label='Daily RV')
 # plt.plot(bjd_int, rv_daily_int-np.mean(rv_daily), '.')
 # plt.title('HARPS-N three years solar RV')

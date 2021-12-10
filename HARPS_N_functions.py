@@ -1,3 +1,14 @@
+import numpy as np
+import os
+import glob
+from astropy.io import fits
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+from scipy import stats
+import copy
+
 #------------------------------------------------------#
 #------------------------------------------------------#
 
@@ -296,7 +307,7 @@ def imshow_matrix(coeff_array, file_name):
 	from mpl_toolkits.axes_grid1 import make_axes_locatable
 	fig = plt.figure(figsize=(len(x)/1.5+1, len(y)/1.5+1), frameon=False)
 	plt.title('score = {:.2f}, '.format(score)
-			  + 'rms = {:.2f}'.format(w_rms))
+			  + 'rms = {:.2f}'.format(res_wrms))
 	plt.xlabel('Lag [days]')
 	ax = plt.gca()
 
@@ -350,7 +361,8 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', f
 
 	y_hat 			= lasso.predict(feature_matrix)
 	_, w_std_all 	= weighted_avg_and_std(target_vector, 1/etarget_vector**2)
-	_, w_rms 		= weighted_avg_and_std((y_hat - target_vector), weights=1/etarget_vector**2)
+	_, res_wrms 		= weighted_avg_and_std((y_hat - target_vector), weights=1/etarget_vector**2)
+	_, model_wrms 	= weighted_avg_and_std(y_hat, weights=1/etarget_vector**2)
 	score 			= lasso.score(feature_matrix, target_vector, sample_weight=1/etarget_vector**2)
 
 	if lag=='False':
@@ -365,8 +377,10 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', f
 			_, w_std[i] = weighted_avg_and_std(feature_matrix2[:,i], 1/etarget_vector**2)
 		else:
 			_, w_std[i] = weighted_avg_and_std(feature_matrix[:,i], 1/etarget_vector**2)
-	print('Weighted rms is reduced from {:.2f} to {:.2f}; \nPearson correlation coefficient = {:.2f}.'
-			.format(w_std_all, w_rms, score))
+	print('Weighted rms is reduced from {:.2f} to {:.2f} (-{:.0f}%); \n\
+		Modelled RV weigthed rms = {:.2f};\n\
+		Pearson correlation coefficient = {:.2f}.'
+			.format(w_std_all, res_wrms, (1-res_wrms/w_std_all)*100, model_wrms, score))
 
 	if lag=='False':
 
@@ -382,7 +396,7 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', f
 						'variance percentage': 1
 						}))
 		
-		return y_hat, w_std_all, w_rms, score, df
+		return y_hat, w_std_all, res_wrms, score, df
 
 	else: # maybe problematic!!!
 
@@ -397,7 +411,7 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', f
 		variance_matrix = variance_matrix**2
 		variance_matrix = variance_matrix / variance_matrix.sum() * 100
 
-		return y_hat, w_std_all, w_rms, score, variance_matrix
+		return y_hat, w_std_all, res_wrms, score, variance_matrix
 
 #------------------------------------------------------#
 #------------------------------------------------------#
@@ -445,18 +459,6 @@ def scatter_hist(x, y, xerr, yerr, ax, ax_histx, ax_histy):
     ax_histy.hist(y, bins=bins, orientation='horizontal', color='black', alpha=0.5)
 
 
-
-
-
-
-
-
-
-
-
-
-plt.scatter(x,x, alpha=0.3)
-plt.show()
 
 
 

@@ -2,8 +2,13 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="c72ade28-4bdf-493d-beab-eec2bb93de73" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/FIESTA_demo.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/FIESTA_demo.pdf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Flux_residual_rms.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/Flux_residual_rms.pdf" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/HARPS-N.py" beforeDir="false" afterPath="$PROJECT_DIR$/HARPS-N.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HARPS_N_functions.py" beforeDir="false" afterPath="$PROJECT_DIR$/HARPS_N_functions.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/flux_residual.py" beforeDir="false" afterPath="$PROJECT_DIR$/flux_residual.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rv_daily.pdf" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -41,8 +46,13 @@
   <component name="PropertiesComponent">
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
-    <property name="WebServerToolWindowFactoryState" value="false" />
-    <property name="settings.editor.selected.configurable" value="configurable.group.project" />
+    <property name="WebServerToolWindowFactoryState" value="true" />
+    <property name="WebServerToolWindowPanel.toolwindow.highlight.mappings" value="true" />
+    <property name="WebServerToolWindowPanel.toolwindow.highlight.symlinks" value="true" />
+    <property name="WebServerToolWindowPanel.toolwindow.show.date" value="false" />
+    <property name="WebServerToolWindowPanel.toolwindow.show.permissions" value="false" />
+    <property name="WebServerToolWindowPanel.toolwindow.show.size" value="false" />
+    <property name="settings.editor.selected.configurable" value="preferences.pluginManager" />
   </component>
   <component name="RunManager">
     <configuration default="true" type="PythonConfigurationType" factoryName="Python">
@@ -85,6 +95,9 @@
       <workItem from="1624891531194" duration="1174000" />
       <workItem from="1628189375546" duration="24188000" />
       <workItem from="1633657037341" duration="21000" />
+      <workItem from="1640359218524" duration="11000" />
+      <workItem from="1640359263406" duration="543000" />
+      <workItem from="1642040345519" duration="2067000" />
     </task>
     <servers />
   </component>

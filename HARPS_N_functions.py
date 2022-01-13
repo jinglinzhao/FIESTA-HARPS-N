@@ -9,36 +9,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import copy
 
-#------------------------------------------------------#
-#------------------------------------------------------#
 
-def new_periodogram(x, y, dy, height_ratio=0.4,
-				plot_min_t=2, max_f=1, spp=100):
-	
-	from scipy.signal import find_peaks
-	from astropy.timeseries import LombScargle
-
-	time_span = (max(x) - min(x))
-	min_f   = 1/time_span
-
-	frequency, power = LombScargle(x, y, dy).autopower(minimum_frequency=min_f,
-												   maximum_frequency=max_f,
-												   samples_per_peak=spp)
-
-	plot_x = 1/frequency
-	idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
-	height = max(power[idxx])*height_ratio
-	ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
-	peaks, _ = find_peaks(power[idxx], height=height)
-	ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
-
-	for n in range(len(plot_x[idxx][peaks])):
-		ax.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
-
-	ax.set_xlim([plot_min_t,time_span/2])
-	ax.set_ylim([0, 1.2*max(power[idxx])])
-	ax.set_xscale('log')
-	
 #------------------------------------------------------#
 #------------------------------------------------------#
 
@@ -59,6 +30,34 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 		file_name 	= 'time-series_and_shift_correlation.png'
 
 	'''
+
+	def new_periodogram(x, y, dy, height_ratio=0.4, plot_min_t=2, max_f=1, spp=100):
+	
+		from scipy.signal import find_peaks
+		from astropy.timeseries import LombScargle
+
+		time_span = (max(x) - min(x))
+		min_f   = 1/time_span
+
+		frequency, power = LombScargle(x, y, dy).autopower(minimum_frequency=min_f,
+													   maximum_frequency=max_f,
+													   samples_per_peak=spp)
+
+		plot_x = 1/frequency
+		idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
+		height = max(power[idxx])*height_ratio
+		ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
+		peaks, _ = find_peaks(power[idxx], height=height)
+		ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
+
+		for n in range(len(plot_x[idxx][peaks])):
+			ax.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
+
+		ax.set_xlim([plot_min_t,time_span/2])
+		ax.set_ylim([0, 1.2*max(power[idxx])])
+
+		ax.set_xscale('log')
+
 
 	from sklearn.linear_model import LinearRegression
 
@@ -93,12 +92,16 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 				if r==0:
 					reg = LinearRegression().fit(rv.reshape(-1, 1), rv.reshape(-1, 1))
 					score = reg.score(rv.reshape(-1, 1), rv.reshape(-1, 1))
-					ax.set_title('score = {:.2f}'.format(score))
+					adjust_R2 = 1-(1-score)*(len(t)-1)/(len(t)-1-1)
+					title = r'$\bar{R}$' + r'$^2$'
+					ax.set_title(title + ' = {:.2f}'.format(adjust_R2))					
 					ax.plot(rv-np.mean(rv), rv-np.mean(rv), 'k.', alpha = alpha2)				
 				if r>0:
 					reg = LinearRegression().fit(rv.reshape(-1, 1), ind[r-1,:].reshape(-1, 1))
 					score = reg.score(rv.reshape(-1, 1), ind[r-1,:].reshape(-1, 1))
-					ax.set_title('score = {:.2f}'.format(score))
+					adjust_R2 = 1-(1-score)*(len(t)-1)/(len(t)-1-1)
+					title = r'$\bar{R}$' + r'$^2$'
+					ax.set_title(title + ' = {:.2f}'.format(adjust_R2))
 					ax.plot(rv-np.mean(rv), ind[r-1,:], 'k.', alpha = alpha2)
 				if r!=k_mode:
 					ax.set_xticks([])
@@ -137,6 +140,32 @@ def plot_all_but_corr(k_mode, t, ind, eind, height_ratio, ts_xlabel, pe_xlabel, 
 		file_name 	= 'time-series_and_shift_correlation.png'
 
 	'''
+	def new_periodogram(x, y, dy, height_ratio=height_ratio, plot_min_t=2, max_f=1, spp=100):
+	
+		from scipy.signal import find_peaks
+		from astropy.timeseries import LombScargle
+
+		time_span = (max(x) - min(x))
+		min_f   = 1/time_span
+
+		frequency, power = LombScargle(x, y, dy).autopower(minimum_frequency=min_f,
+													   maximum_frequency=max_f,
+													   samples_per_peak=spp)
+
+		plot_x = 1/frequency
+		idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
+		height = max(power[idxx])*height_ratio
+		ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
+		peaks, _ = find_peaks(power[idxx], height=height)
+		ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
+
+		for n in range(len(plot_x[idxx][peaks])):
+			ax.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
+
+		ax.set_xlim([plot_min_t,time_span/2])
+		ax.set_ylim([0, 1.25*max(power[idxx])])
+
+		ax.set_xscale('log')
 
 	from sklearn.linear_model import LinearRegression
 
@@ -157,7 +186,7 @@ def plot_all_but_corr(k_mode, t, ind, eind, height_ratio, ts_xlabel, pe_xlabel, 
 			if c==0:
 				ax.errorbar(t, ind[r,:], eind[r,:],  marker='.', ms=5, color='black', ls='none', alpha=alpha1)
 				if len(ind_yalbel)==1:
-					ax.set_ylabel(ind_yalbel + '$_{' + str(r+1) + '}$')
+					ax.set_ylabel(ind_yalbel[0] + '$_{' + str(r+1) + '}$')
 				else:
 					ax.set_ylabel(ind_yalbel[r])
 				if r==0:
@@ -300,14 +329,15 @@ def imshow_matrix(coeff_array, file_name):
 		file_name = fwhm_bis_multi_coef
 		file_name = pca_coef
 	'''
-
+	day = int((variance_matrix3.shape[0]-1)/2)
 	x = np.arange(day * 2 + 1) - day
 	y = np.arange(coeff_array.shape[1]) + 1
 
 	from mpl_toolkits.axes_grid1 import make_axes_locatable
 	fig = plt.figure(figsize=(len(x)/1.5+1, len(y)/1.5+1), frameon=False)
-	plt.title('score = {:.2f}, '.format(score)
-			  + 'rms = {:.2f}'.format(res_wrms))
+	title = r'$\bar{R}$' + r'$^2$'
+	plt.title(title + ' = {:.3f}'.format(score)
+			  + '   wRMS = {:.2f}'.format(res_wrms))
 	plt.xlabel('Lag [days]')
 	ax = plt.gca()
 
@@ -339,7 +369,7 @@ def imshow_matrix(coeff_array, file_name):
 	cax = divider.append_axes("right", size="5%", pad=0.05)
 
 	plt.colorbar(im2, cax=cax) 
-	plt.savefig(file_name + '_{:.2f}_{:d}_{:d}'.format(alpha, day, k_max) +'.png')
+	plt.savefig(file_name + '_{:.2f}_{:d}_{:d}'.format(0.05, day, k_max) +'.pdf')
 
 	plt.close()
 
@@ -364,6 +394,9 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', f
 	_, res_wrms 		= weighted_avg_and_std((y_hat - target_vector), weights=1/etarget_vector**2)
 	_, model_wrms 	= weighted_avg_and_std(y_hat, weights=1/etarget_vector**2)
 	score 			= lasso.score(feature_matrix, target_vector, sample_weight=1/etarget_vector**2)
+	n, p 			= len(target_vector), feature_matrix.shape[1]
+	adjust_R2 		= 1-(1-score)*(n-1)/(n-p-1)
+	score 			= adjust_R2
 
 	if lag=='False':
 		k_feature2 	= feature_matrix.shape[1]
@@ -379,7 +412,7 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', f
 			_, w_std[i] = weighted_avg_and_std(feature_matrix[:,i], 1/etarget_vector**2)
 	print('Weighted rms is reduced from {:.2f} to {:.2f} (-{:.0f}%); \n\
 		Modelled RV weigthed rms = {:.2f};\n\
-		Pearson correlation coefficient = {:.2f}.'
+		Adjusted R squared = {:.3f}.'
 			.format(w_std_all, res_wrms, (1-res_wrms/w_std_all)*100, model_wrms, score))
 
 	if lag=='False':

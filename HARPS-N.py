@@ -628,18 +628,19 @@ if 0:
 	rv_raw_daily = rv_raw_daily[0::5]
 	erv_daily = erv_daily[0::5]
 
-np.savetxt('V_grid.txt', V_grid)
-np.savetxt('CCF_daily.txt', CCF_daily)
-np.savetxt('eCCF_daily.txt', eCCF_daily)
-np.savetxt('bjd_daily.txt', bjd_daily)
-np.savetxt('rv_daily.txt', rv_daily)
-np.savetxt('rv_raw_daily.txt', rv_raw_daily)
-np.savetxt('erv_daily.txt', erv_daily)
+if 0:
+	np.savetxt('V_grid.txt', V_grid)
+	np.savetxt('CCF_daily.txt', CCF_daily)
+	np.savetxt('eCCF_daily.txt', eCCF_daily)
+	np.savetxt('bjd_daily.txt', bjd_daily)
+	np.savetxt('rv_daily.txt', rv_daily)
+	np.savetxt('rv_raw_daily.txt', rv_raw_daily)
+	np.savetxt('erv_daily.txt', erv_daily)
 
-np.savetxt('bis_daily.txt', bis_daily)
-np.savetxt('fwhm_daily.txt', fwhm_daily)
-np.savetxt('ebis_daily.txt', ebis_daily)
-np.savetxt('efwhm_daily.txt', efwhm_daily)
+	np.savetxt('bis_daily.txt', bis_daily)
+	np.savetxt('fwhm_daily.txt', fwhm_daily)
+	np.savetxt('ebis_daily.txt', ebis_daily)
+	np.savetxt('efwhm_daily.txt', efwhm_daily)
 
 V_grid = np.loadtxt('V_grid.txt')
 CCF_daily = np.loadtxt('CCF_daily.txt')
@@ -684,11 +685,16 @@ if 0:
 
 # change the parameter names 
 rowmask		= np.load('./SCALPELS/rowmask.npy')
-CCF_daily 	= ccfpkl[rowmask,:].T
-eCCF_daily 	= errpkl[rowmask,:].T
-bjd_daily 	= bjdpkl[rowmask]
-rv_daily 	= rvhpkl[rowmask]
+CCF_daily 	= 1-ccfpkl[rowmask,:].T
+eCCF_daily 	= errpkl[rowmask,:].T # note that noise is overestaimated in Cameron's data
+eCCF_daily 	= eCCF_daily / (np.mean(eCCF_daily) / np.mean(np.loadtxt('eCCF_daily.txt')))
+bjd_daily 	= bjdpkl[rowmask]-2400000
+rv_daily 	= rvhpkl[rowmask]*1000
+rv_raw_daily= rvbpkl[rowmask]*1000
+erv_daily 	= rvepkl[rowmask]*1000
 
+# plt.plot(V_grid, CCF_daily - np.mean(CCF_daily, axis=1), '.')
+# plt.show()
 
 # normality tests
 if 0:
@@ -820,7 +826,7 @@ plt.show()
 
 std_matrix = np.zeros(15)
 
-k_max = 7 
+k_max = 7
 for k_max in (np.arange(15)+5):
 	df, shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, k_max=k_max)
 	# Convertion from km/s to m/s
@@ -828,7 +834,6 @@ for k_max in (np.arange(15)+5):
 	err_shift_spectrum 	*= 1000
 	RV_gauss 			*= 1000
 
-	bjd_daily 		= np.loadtxt('bjd_daily.txt')
 	shift_function 	= np.zeros(shift_spectrum.shape)
 	# short_variation = np.zeros(shift_spectrum.shape)
 	# long_variation 	= np.zeros(shift_spectrum.shape)
@@ -863,25 +868,24 @@ for k_max in (np.arange(15)+5):
 					title='ICA_pca periodogram',
 					file_name='ICA_pca_periodogram.png')
 
-	if 0: 
-		plt.rcParams.update({'font.size': 14})
-		plot_all(k_mode=k_max, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
-			ind=power_spectrum, eind=err_power_spectrum, 
-			ts_xlabel='BJD - 2400000 [d]', 
-			rv_xlabel='$RV_{HARPS}$', 
-			pe_xlabel='Period [days]',
-			ind_yalbel=r'$A$',
-			file_name='Amplitude_time-series_correlation_periodogram.png')
-		plt.show()
+	plt.rcParams.update({'font.size': 14})
+	plot_all(k_mode=20, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+		ind=power_spectrum, eind=err_power_spectrum, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		rv_xlabel='$RV_{HARPS}$', 
+		pe_xlabel='Period [days]',
+		ind_yalbel=r'$A$',
+		file_name='Amplitude_time-series_correlation_periodogram.pdf')
+	plt.show()
 
-		plot_all(k_mode=k_max, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
-			ind=shift_function, eind=err_shift_spectrum, 
-			ts_xlabel='BJD - 2400000 [d]', 
-			rv_xlabel='$RV_{HARPS}$', 
-			pe_xlabel='Period [days]',
-			ind_yalbel=r'$\Delta RV$',
-			file_name='shift_time-series_correlation_periodogram.png')
-		plt.show()
+	plot_all(k_mode=20, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+		ind=shift_function, eind=err_shift_spectrum, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		rv_xlabel='$RV_{HARPS}$', 
+		pe_xlabel='Period [days]',
+		ind_yalbel=r'$\Delta RV$',
+		file_name='shift_time-series_correlation_periodogram.pdf')
+	plt.show()
 
 	# hack!
 	# shift_function = short_variation
@@ -889,16 +893,16 @@ for k_max in (np.arange(15)+5):
 
 	my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=shift_function.T, X_err=err_shift_spectrum.T, nor=True)
 
-	if 0:
-		plot_all(k_mode=3, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
-			ind=my_pca_score.T, eind=my_err_pca_score.T, 
-			ts_xlabel='BJD - 2400000 [d]', 
-			rv_xlabel='$RV_{HARPS}$', 
-			pe_xlabel='Period [days]',
-			ind_yalbel='PC',
-			file_name='PCA_delta_RV_k_max={:d}.png'.format(k_max))
-		plt.close()
+	plot_all(k_mode=3, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+		ind=my_pca_score.T, eind=my_err_pca_score.T, 
+		ts_xlabel='BJD - 2400000 [d]', 
+		rv_xlabel='$RV_{HARPS}$', 
+		pe_xlabel='Period [days]',
+		ind_yalbel='PC',
+		file_name='PCA_delta_RV_k_max={:d}.pdf'.format(k_max))
+	plt.close()
 
+	if 0:
 		my_P, my_pca_score, my_err_pca_score, n_pca = my_pca(X=power_spectrum.T, X_err=err_power_spectrum.T, nor=True)
 
 		plot_all(k_mode=3, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
@@ -907,7 +911,7 @@ for k_max in (np.arange(15)+5):
 			rv_xlabel='$RV_{HARPS}$', 
 			pe_xlabel='Period [days]',
 			ind_yalbel='PC',
-			file_name='PCA_A_k_max={:d}.png'.format(k_max))
+			file_name='PCA_A_k_max={:d}.pdf'.format(k_max))
 		plt.close()
 
 	k_feature = 3
@@ -919,23 +923,14 @@ for k_max in (np.arange(15)+5):
 			x=bjd_daily, y=my_pca_score[:,i], yerr=my_err_pca_score[:,i], r=100)
 
 	if 0:
-		time_series(x=bjd_daily, y=short_variation.T, dy=my_err_pca_score, N=k_feature, ylabel='PCA',
-						title='Rotation modulated variation time series',
-						file_name='Rotation_modulated_variation_time_series.png')
-
-		periodogram(x=bjd_daily, y=short_variation.T, dy=my_err_pca_score, N=k_feature,
-					plot_min_t=2, study_min_t=5, max_f=1, spp=100,
-					ylabel='PCA',
-					title='Rotation modulated variation periodogram',
-					file_name='Rotation_modulated_variation_periodogram.png')
 
 		plot_all_but_corr(k_mode=3, t=bjd_daily,
 			ind=short_variation, eind=my_err_pca_score[:,0:3].T, 
 			ts_xlabel='BJD - 2400000 [d]', 
 			height_ratio = 0.8,
 			pe_xlabel='Period [days]',
-			ind_yalbel='S-PC',
-			file_name='Rotation_modulated_variation.png')
+			ind_yalbel=['S-PC'],
+			file_name='Rotation_modulated_variation.pdf')
 		plt.close()
 
 		bgls_periodogram(x=bjd_daily, y=power_spectrum.T, dy=err_power_spectrum.T, N=None,
@@ -944,24 +939,26 @@ for k_max in (np.arange(15)+5):
 					title = 'Periodogram',
 					file_name='Periodogram.png')
 
-		time_series(x=bjd_daily, y=long_variation.T, dy=my_err_pca_score, N=k_feature, ylabel='PCA',
-						title='Long-term variation time series',
-						file_name='Long-term_variation_time_series.png')
-
-		periodogram(x=bjd_daily, y=long_variation.T, dy=my_err_pca_score, N=k_feature,
-					plot_min_t=2, study_min_t=5, max_f=1, spp=100,
-					ylabel='PCA',
-					title='Long-term variation periodogram',
-					file_name='Long-term_variation_periodogram.png')	
-
 		plot_all_but_corr(k_mode=3, t=bjd_daily,
 			ind=long_variation, eind=my_err_pca_score[:,0:3].T, 
 			ts_xlabel='BJD - 2400000 [d]', 
 			height_ratio = 0.8,
 			pe_xlabel='Period [days]',
-			ind_yalbel='L-PC',
-			file_name='Long-term_variation.png')
+			ind_yalbel=['L-PC'],
+			file_name='Long-term_variation.pdf')
 		plt.close()
+
+		# further combined 
+		plot_all_but_corr(k_mode=6, t=bjd_daily,
+			ind=np.vstack([short_variation, long_variation]), 
+			eind=np.vstack([my_err_pca_score[:,0:3].T, my_err_pca_score[:,0:3].T]),
+			ts_xlabel='BJD - 2400000 [d]', 
+			height_ratio = 0.8,
+			pe_xlabel='Period [days]',
+			ind_yalbel=['S-PC$_1$','S-PC$_2$','S-PC$_3$','L-PC$_1$','L-PC$_2$','L-PC$_3$'],
+			file_name='LS-term_variation.pdf')
+		plt.close()
+
 
 	if 0:
 		rot_P, rot_pca_score, rot_err_pca_score, n_pca = my_pca(X=short_variation[0:3,:].T, X_err=my_err_pca_score[:,0:3], nor=True)
@@ -1057,7 +1054,7 @@ for k_max in (np.arange(15)+5):
 	#---------------------------------------------------------------------------------#
 	from scipy.interpolate import CubicSpline
 
-	bjd_daily 		= np.loadtxt('bjd_daily.txt')
+	# bjd_daily 		= np.loadtxt('bjd_daily.txt')
 	idx_bjd 		= bjd_daily<58100
 	bjd_daily_part1 = bjd_daily[idx_bjd]
 	bjd_daily_part2 = bjd_daily[~idx_bjd]
@@ -1089,10 +1086,10 @@ for k_max in (np.arange(15)+5):
 	
 	feature_matrix_int_lag[:,k_feature*(2*day+1):] = feature_matrix[index, k_feature:]
 
-	y_hat3, w_std_all3, w_rms, score, variance_matrix3 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
+	y_hat3, w_std_all3, res_wrms, score, variance_matrix3 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
 	imshow_matrix(variance_matrix3, file_name='fiesta_multi_coef') # working :) 
 
-	y_hat6, w_std_all6, w_rms, score, variance_matrix6 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
+	y_hat6, w_std_all6, res_wrms, score, variance_matrix6 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
 	imshow_matrix(variance_matrix6, file_name='fwhm_bis_multi_coef') 
 
 	if 0: # test 
@@ -1112,6 +1109,7 @@ for k_max in (np.arange(15)+5):
 	# Compare the performance of two models
 	#---------------------------------------------------------------------------------#
 	# start with a square Figure
+	plt.rcParams.update({'font.size': 14})
 	fig = plt.figure(figsize=(8, 8))
 
 	# Add a gridspec with two rows and two columns and a ratio of 2 to 7 between
@@ -1131,12 +1129,12 @@ for k_max in (np.arange(15)+5):
 
 	scatter_hist(res3, res6, erv_daily[index], erv_daily[index], ax, ax_histx, ax_histy)
 
-	plt.savefig('scatter_histogram.png')
+	plt.savefig('scatter_histogram.pdf')
 	plt.show()
 
 	_ = plt.hist(y_hat3-y_hat6, bins=20, color='black', alpha=0.5)
 	plt.xlabel('Model 3 - Model 6 [m/s]')
-	plt.savefig('model_comparison_histogram.png')
+	plt.savefig('model_comparison_histogram.pdf')
 	plt.show()
 
 	np.percentile(y_hat3-y_hat6, 50+34.1) - np.percentile(y_hat3-y_hat6, 50-34.1)
@@ -1195,31 +1193,13 @@ for k_max in (np.arange(15)+5):
 		_, short_variation[i,:], long_variation[i,:] = long_short_divide(
 			x=bjd_daily, y=fwhm_bis[:,i], yerr=efwhm_bis[:,i], r=100)
 
-	plot_all_but_corr(k_mode=2, t=bjd_daily,
-		ind=short_variation, eind=efwhm_bis.T, 
-		ts_xlabel='BJD - 2400000 [d]', 
-		height_ratio = 0.8,
-		pe_xlabel='Period [days]',
-		ind_yalbel='ind',
-		file_name='fwhm_bis_Rotation_modulated_variation.png')
-	plt.close()
-
-	plot_all_but_corr(k_mode=2, t=bjd_daily,
-		ind=long_variation, eind=efwhm_bis.T, 
-		ts_xlabel='BJD - 2400000 [d]', 
-		height_ratio = 0.8,
-		pe_xlabel='Period [days]',
-		ind_yalbel='ind',
-		file_name='fwhm_bis_Long-term_variation.png')
-	plt.close()
-
 	plot_all_but_corr(k_mode=4, t=bjd_daily,
 		ind=feature_matrix.T, eind=np.hstack([efwhm_bis, efwhm_bis]).T, 
 		ts_xlabel='BJD - 2400000 [d]', 
 		height_ratio = 0.8,
 		pe_xlabel='Period [days]',
 		ind_yalbel=['S-FWHM', 'S-BIS', 'L-FWHM', 'L-BIS'],
-		file_name='fwhm_bis_variation.png')
+		file_name='fwhm_bis_variation.pdf')
 	plt.close()
 
 

@@ -30,7 +30,7 @@ def FT(signal, spacing):
 valid_ccf = sorted(glob.glob('../../AstroData/FIESTA-HARPS-N/valid_ccfs/*.fits'))
 N_file 	= len(valid_ccf)
 V_grid 	= (np.arange(49) - 24) * 0.82
-idx 	= (-16<V_grid) & (V_grid<16)
+idx 	= (-17<V_grid) & (V_grid<17)
 V_grid 	= V_grid[idx]
 spacing = np.diff(V_grid)[0]
 

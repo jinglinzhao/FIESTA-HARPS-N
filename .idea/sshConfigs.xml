@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig authType="PASSWORD" connectionConfig="{&quot;hostKeyVerifier&quot;:{&quot;stringHostKeyChecking&quot;:&quot;ASK&quot;}}" host="submit.aci.ics.psu.edu" id="970b9b26-6e9d-425d-8af0-6d58453af929" port="22" nameFormat="DESCRIPTIVE" username="jvz5625" />
+    </configs>
+  </component>
+</project>

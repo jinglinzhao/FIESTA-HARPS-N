@@ -77,40 +77,59 @@ plt.show()
 k_max = 6
 
 plt.rcParams.update({'font.size': 14})
-plt.subplots(figsize=(10, k_max))
-plt.gcf().subplots_adjust(wspace=0.35)
+plt.subplots(figsize=(16, 6))
+plt.gcf().subplots_adjust(left=0.1, wspace=0.35)
 
 for i in range(k_max):
 
-    ax = plt.subplot(k_max, 2, 2*i + 1)
+    ax = plt.subplot(k_max, 3, 3*i+1)
     if i == 0:
     	plt.plot(V_grid, (np.mean(CCF))*np.ones(len(V_grid)), 'k-')	
     else:
     	plt.plot(V_grid, res[i,:] - res[i-1,:], 'k-')
     plt.ylabel(r'$k$=%d' %(i))
     if i == 0:
-        plt.title('Basis functions')
+        plt.title('(a) Basis functions')
 
     if i!=k_max-1:
         ax.set_xticks([])
     else:
         plt.xlabel('V grid [km/s]')
 
-    ax = plt.subplot(k_max, 2, 2*i+2)
+    ax = plt.subplot(k_max, 3, 3*i+2)
     plt.plot(V_grid, -res[i,:], 'k-')
     if i == 0:
-        plt.title('Residual')
+        plt.title('(b) Residual')
 
     if i!=k_max-1:
         ax.set_xticks([])
     else:
         plt.xlabel('V grid [km/s]')
 
+def SNR(x):
+	return np.median(1-CCF)/x
+
+inverse = SNR
+
+ax = plt.subplot(1, 3, 3)
+
+for i in range(freq.size-1):
+	ax.plot(i, res_rms[i], 'ko', alpha = 0.6)
+	print(i, res_rms[i])
+ax.set_title('(c) Modelling precision')
+xticks = np.hstack((np.arange(10), np.array([10,12,14,16,18,20])))
+ax.set_xticks(xticks)
+ax.set_xlabel(r'$k$')
+ax.set_yscale('log')
+ax.set_ylabel('Residual RMS')
+ax.grid(b=True, which='both')
+secax = ax.secondary_yaxis('right', functions=(SNR, inverse))	
+secax.set_ylabel('SNR')
 plt.savefig('FIESTA_demo.pdf')
 plt.show()
 
 
-
+Number of Fourier modes used
 # Plot with two axes 
 # https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.secondary_yaxis.html#matplotlib.axes.Axes.secondary_yaxis
 # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/secondary_axis.html
@@ -118,22 +137,7 @@ plt.show()
 plt.rcParams.update({'font.size': 14})
 fig, ax = plt.subplots(figsize=(10, k_max))
 
-def SNR(x):
-	return np.median(1-CCF)/x
 
-inverse = SNR
-
-for i in range(freq.size-1):
-	ax.plot(i, res_rms[i], 'ko', alpha = 1)
-	ax.set_xticks(range(freq.size-1))
-	ax.set_xlabel('Number of Fourier modes used')
-	ax.set_yscale('log')
-	ax.set_ylabel('Modelling error')
-	ax.grid(b=True, which='both')
-	secax = ax.secondary_yaxis('right', functions=(SNR, inverse))	
-	secax.set_ylabel('SNR')
-plt.savefig('Flux_residual_rms.pdf')
-plt.show()
 
 
 

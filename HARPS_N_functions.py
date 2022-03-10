@@ -13,7 +13,7 @@ import copy
 #------------------------------------------------------#
 #------------------------------------------------------#
 
-def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind_yalbel, file_name):
+def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind_yalbel, file_name, HARPS=True):
 
 	'''
 	e.g. 
@@ -46,7 +46,7 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 		plot_x = 1/frequency
 		idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
 		height = max(power[idxx])*height_ratio
-		ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
+		ax.plot(plot_x[idxx], power[idxx], 'k-', alpha=0.5)
 		peaks, _ = find_peaks(power[idxx], height=height)
 		ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
 
@@ -55,6 +55,12 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 
 		ax.set_xlim([plot_min_t,time_span/2])
 		ax.set_ylim([0, 1.2*max(power[idxx])])
+
+		if HARPS == True:
+			dt = 1
+			ax.axvspan(28-dt, 28+dt, alpha=0.2, color='red')
+			ax.axvspan(210-10, 210+10, alpha=0.2, color='red')
+			ax.axvspan(285-10, 285+10, alpha=0.2, color='red')
 
 		ax.set_xscale('log')
 
@@ -324,12 +330,14 @@ def weighted_avg_and_std(values, weights):
 
 def imshow_matrix(coeff_array, file_name):
 
+	from matplotlib import colors
+
 	'''
 		file_name = fwhm_bis_coef
 		file_name = fwhm_bis_multi_coef
 		file_name = pca_coef
 	'''
-	day = int((variance_matrix3.shape[0]-1)/2)
+	day = int((coeff_array.shape[0]-1)/2)
 	x = np.arange(day * 2 + 1) - day
 	y = np.arange(coeff_array.shape[1]) + 1
 
@@ -344,7 +352,7 @@ def imshow_matrix(coeff_array, file_name):
 	if file_name == 'lasso_coef':
 		im2 = plt.imshow(np.transpose(coeff_array),  vmin=-5, vmax=5, cmap=plt.cm.bwr, alpha=.9)
 	else:
-		im2 = plt.imshow(np.transpose(coeff_array),  vmin=0, vmax=100, cmap=plt.cm.get_cmap('Reds'), alpha=.9)
+		im2 = plt.imshow(np.transpose(coeff_array),  cmap=plt.cm.get_cmap('Reds'), alpha=.9, norm=colors.LogNorm(vmin=0.1, vmax=100))
 
 	# Loop over data dimensions and create text annotations.
 	for i in range(coeff_array.shape[1]):
@@ -375,8 +383,82 @@ def imshow_matrix(coeff_array, file_name):
 
 #------------------------------------------------------#
 #------------------------------------------------------#
+# def mlr_cv(feature_matrix, target_vector, etarget_vector, alpha, lag='True', day=5, feature_matrix2=None):
 
-def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', feature_matrix2=None):
+# 	'''
+# 		Multiple linear regression
+# 		no lag involved 
+# 	'''		
+
+# 	from sklearn.linear_model import Lasso
+	
+# 	k_fold = KFold(3)
+# 	for k, (train, test) in enumerate(k_fold.split(X, y)):
+
+
+
+# 	lasso 	= Lasso(alpha=alpha, max_iter=10000).fit(feature_matrix, target_vector, sample_weight=1/etarget_vector**2)
+
+# 	y_hat 			= lasso.predict(feature_matrix)
+# 	_, w_std_all 	= weighted_avg_and_std(target_vector, 1/etarget_vector**2)
+# 	_, res_wrms 	= weighted_avg_and_std((y_hat - target_vector), weights=1/etarget_vector**2)
+# 	_, model_wrms 	= weighted_avg_and_std(y_hat, weights=1/etarget_vector**2)
+# 	score 			= lasso.score(feature_matrix, target_vector, sample_weight=1/etarget_vector**2)
+# 	n, p 			= len(target_vector), feature_matrix.shape[1]
+# 	adjust_R2 		= 1-(1-score)*(n-1)/(n-p-1)
+# 	score 			= adjust_R2
+
+# 	if lag=='False':
+# 		k_feature2 	= feature_matrix.shape[1]
+# 	else:
+# 		k_feature2 	= int(feature_matrix.shape[1]/(day+1))
+# 		k_feature 	= int(k_feature2/2)
+
+# 	w_std = np.zeros(k_feature2)
+# 	for i in range(len(w_std)):
+# 		if lag=='True':
+# 			_, w_std[i] = weighted_avg_and_std(feature_matrix2[:,i], 1/etarget_vector**2)
+# 		else:
+# 			_, w_std[i] = weighted_avg_and_std(feature_matrix[:,i], 1/etarget_vector**2)
+# 	print('Weighted rms is reduced from {:.2f} to {:.2f} (-{:.0f}%); \n\
+# 		Modelled RV weigthed rms = {:.2f};\n\
+# 		Adjusted R squared = {:.3f}.'
+# 			.format(w_std_all, res_wrms, (1-res_wrms/w_std_all)*100, model_wrms, score))
+
+# 	if lag=='False':
+
+# 		import pandas as pd 
+# 		df = pd.DataFrame({	'coefficients'		: lasso.coef_, 
+# 							'std'				: w_std,
+# 							'variance'			: (lasso.coef_*w_std)**2,
+# 							'variance percentage': (lasso.coef_*w_std)**2 / sum((lasso.coef_*w_std)**2) * 100
+# 							})	
+# 		print(df.round({'coefficients'	: 2, 
+# 						'std'		: 2,
+# 						'variance'		: 2,
+# 						'variance percentage': 1
+# 						}))
+		
+# 		return y_hat, w_std_all, res_wrms, score, df
+
+# 	else: # maybe problematic!!!
+
+# 		coeff_matrix = np.zeros((day*2+1, k_feature2))
+# 		for i in range(k_feature):
+# 			coeff_matrix[:,i] = lasso.coef_[i:k_feature*(2*day+1):k_feature]
+# 		coeff_matrix[day,k_feature:]=lasso.coef_[k_feature*(2*day+1):]
+
+# 		variance_matrix = np.zeros(coeff_matrix.shape)
+# 		for i in range(day*2+1):
+# 			variance_matrix[i,:] = coeff_matrix[i,:]*w_std
+# 		variance_matrix = variance_matrix**2
+# 		variance_matrix = variance_matrix / variance_matrix.sum() * 100
+
+# 		return y_hat, w_std_all, res_wrms, score, variance_matrix
+
+#------------------------------------------------------#
+#------------------------------------------------------#
+def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', day=5, feature_matrix2=None):
 
 	'''
 		Multiple linear regression
@@ -391,7 +473,7 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', f
 
 	y_hat 			= lasso.predict(feature_matrix)
 	_, w_std_all 	= weighted_avg_and_std(target_vector, 1/etarget_vector**2)
-	_, res_wrms 		= weighted_avg_and_std((y_hat - target_vector), weights=1/etarget_vector**2)
+	_, res_wrms 	= weighted_avg_and_std((y_hat - target_vector), weights=1/etarget_vector**2)
 	_, model_wrms 	= weighted_avg_and_std(y_hat, weights=1/etarget_vector**2)
 	score 			= lasso.score(feature_matrix, target_vector, sample_weight=1/etarget_vector**2)
 	n, p 			= len(target_vector), feature_matrix.shape[1]

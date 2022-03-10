@@ -2,13 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="c72ade28-4bdf-493d-beab-eec2bb93de73" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/sshConfigs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sshConfigs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/FIESTA_demo.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/FIESTA_demo.pdf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Flux_residual_rms.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/Flux_residual_rms.pdf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HARPS-N.py" beforeDir="false" afterPath="$PROJECT_DIR$/HARPS-N.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HARPS_N_functions.py" beforeDir="false" afterPath="$PROJECT_DIR$/HARPS_N_functions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/flux_residual.py" beforeDir="false" afterPath="$PROJECT_DIR$/flux_residual.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/rv_daily.pdf" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -98,6 +93,7 @@
       <workItem from="1640359218524" duration="11000" />
       <workItem from="1640359263406" duration="543000" />
       <workItem from="1642040345519" duration="2067000" />
+      <workItem from="1642174693099" duration="948000" />
     </task>
     <servers />
   </component>

@@ -1146,14 +1146,15 @@ for k_max in (np.arange(16)+5):
 			y 		= rv_daily[index][idx_random]
 			sw 		= 1/erv_daily[index][idx_random]**2
 
-			lasso = Lasso(random_state=0)
-			alphas = np.linspace(0.01, 0.1, 100)
+			lasso = Lasso()
+			alphas = np.logspace(-3, -1, 100)
 
 			tuned_parameters = [{"alpha": alphas}]
 
-			clf = GridSearchCV(lasso, tuned_parameters, cv=n_folds, refit=True, return_train_score=True)
+			clf = GridSearchCV(lasso, tuned_parameters, cv=n_folds, scoring='neg_root_mean_squared_error', refit=True, return_train_score=True)
 			clf.fit(X, y, sample_weight=sw)
 			alpna_n[n] = clf.best_estimator_.alpha
+			# clf.best_score_
 
 		import scipy
 		_, bins, _ = plt.hist(alpna_n, 30, density=1, alpha=0.5)
@@ -1173,6 +1174,7 @@ for k_max in (np.arange(16)+5):
 	from sklearn.linear_model import Lasso
 	from sklearn.model_selection import train_test_split
 	from sklearn.utils import shuffle
+	from sklearn.model_selection import GridSearchCV
 
 	size 		= feature_matrix_int_lag.shape[0]
 	N_folds 	= 5
@@ -1281,15 +1283,14 @@ for k_max in (np.arange(16)+5):
 		sw 		= 1/erv_daily[index][idx_random]**2
 
 		lasso = Lasso(random_state=0, max_iter=10000)
-		alphas = np.logspace(-4, -1, 100)
-
+		alphas = np.logspace(-3, -1, 100)
 
 		tuned_parameters = [{"alpha": alphas}]
 
-		clf = GridSearchCV(lasso, tuned_parameters, cv=n_folds, refit=True, return_train_score=True)
+		clf = GridSearchCV(lasso, tuned_parameters, cv=n_folds, scoring='neg_root_mean_squared_error', refit=True, return_train_score=True)
 		clf.fit(X, y, sample_weight=sw)
-		scores = clf.cv_results_["mean_test_score"]
-		scores2 = clf.cv_results_["mean_train_score"]
+		scores = -clf.cv_results_["mean_test_score"]
+		scores2 = -clf.cv_results_["mean_train_score"]
 		scores_std = clf.cv_results_["std_test_score"]
 		scores_std2 = clf.cv_results_["std_train_score"]
 		plt.figure().set_size_inches(8, 6)
@@ -1316,7 +1317,7 @@ for k_max in (np.arange(16)+5):
 
 		plt.ylabel("CV score +/- std error")
 		plt.xlabel(r"$\lambda$")
-		plt.axhline(np.max(scores), linestyle="--", color=".5")
+		plt.axhline(np.min(scores), linestyle="--", color=".5")
 		plt.xlim([alphas[0], alphas[-1]])
 		plt.legend()
 

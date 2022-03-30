@@ -23,6 +23,24 @@ import pandas as pd
 import shutil
 
 df = pd.read_csv('./harpn_sun_release_timeseries_2015-2018.csv')
+bjd 		= np.array(df['date_bjd'])
+rv 			= np.array(df['rv'])
+erv 		= np.array(df['rv_err'])
+plt.errorbar(bjd, rv, erv, marker='.', alpha=0.1)
+plt.show()
+
+
+time = bjd_daily - [int(bjd_daily[i]+0.5) for i in np.arange(len(bjd_daily))] + 0.5
+len(time[abs((time-np.median(time))*24)<=1]) / len(time) # 92%
+len(time[abs((time-np.median(time))*24)<=2]) / len(time) # 99%
+
+time = (bjd-[int(bjd[i]+0.5) for i in np.arange(len(bjd))]+0.5)*24
+plt.hist(time, bins = 30)
+plt.show()
+
+idx = np.arange(1000) + 10000
+plt.errorbar(time[idx], rv[idx], erv[idx], marker='.', alpha=0.3)
+plt.show()
 
 if 0: 
 	file_ccf = sorted(glob.glob('./ccfs/*.fits'))
@@ -347,7 +365,8 @@ for i in range(len(df)):
 		date0 = date
 		CCF_daily_sum 	= data[69,:]
 		eCCF_daily_sum 	= data2[69,:]**2
-		
+
+
 eCCF_daily[:, k] 		= eCCF_daily_sum**0.5 / np.mean(CCF_daily_sum[~idx])
 CCF_daily[:, k] 		= 1 - CCF_daily_sum / np.mean(CCF_daily_sum[~idx])
 # eCCF_daily[:, k] 		= eCCF_daily_sum[idx]**0.5 / np.mean(CCF_daily_sum[~idx])
@@ -843,7 +862,9 @@ plt.show()
 std_matrix = np.zeros(15)
 
 k_max = 7
-for k_max in (np.arange(16)+5):
+k_max = 20
+k_max = 11
+for k_max in (np.arange(1)+4):
 	df, shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, k_max=k_max)
 	# Convertion from km/s to m/s
 	shift_spectrum 		*= 1000
@@ -887,16 +908,18 @@ for k_max in (np.arange(16)+5):
 	if 0:
 		plt.rcParams.update({'font.size': 14})
 		plot_all(k_mode=20, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+			vlines = [13.4, 28.5, 365/2, 285, 400],
 			ind=power_spectrum, eind=err_power_spectrum, 
 			ts_xlabel='BJD - 2400000 [d]', 
 			rv_xlabel='$RV_{HARPS}$', 
 			pe_xlabel='Period [days]',
 			ind_yalbel=r'$A$',
-			file_name='Amplitude_time-series_correlation_periodogram_SCALPELS.pdf')
-			# file_name='Amplitude_time-series_correlation_periodogram.pdf')
+			# file_name='Amplitude_time-series_correlation_periodogram_SCALPELS.pdf')
+			file_name='Amplitude_time-series_correlation_periodogram.pdf')
 		plt.show()
 
 		plot_all(k_mode=20, t=bjd_daily, rv=rv_daily, erv=erv_daily, 
+			vlines = [13.4, 28.5, 365/2, 285, 400],
 			ind=shift_function, eind=err_shift_spectrum, 
 			ts_xlabel='BJD - 2400000 [d]', 
 			rv_xlabel='$RV_{HARPS}$', 
@@ -941,6 +964,7 @@ for k_max in (np.arange(16)+5):
 			rv_xlabel='$RV_{HARPS}$', 
 			pe_xlabel='Period [days]',
 			ind_yalbel='PC',
+			height_ratio=0.4,
 			file_name='PCA_delta_RV_k_max={:d}.pdf'.format(k_max))
 		plt.close()
 
@@ -978,7 +1002,7 @@ for k_max in (np.arange(16)+5):
 		bgls_periodogram(x=bjd_daily, y=power_spectrum.T, dy=err_power_spectrum.T, N=None,
 					plot_min_t=1, study_min_t=5, max_f=1, spp=100, xc=None,
 					ylabel='A',
-					title = 'Periodogram',
+					title = 'Periodogram', 
 					file_name='Periodogram.png')
 
 		plot_all_but_corr(k_mode=3, t=bjd_daily,
@@ -995,7 +1019,7 @@ for k_max in (np.arange(16)+5):
 			ind=np.vstack([short_variation, long_variation]), 
 			eind=np.vstack([my_err_pca_score[:,0:3].T, my_err_pca_score[:,0:3].T]),
 			ts_xlabel='BJD - 2400000 [d]', 
-			height_ratio = 0.8,
+			height_ratio = 0.81,
 			pe_xlabel='Period [days]',
 			ind_yalbel=['S-PC$_1$','S-PC$_2$','S-PC$_3$','L-PC$_1$','L-PC$_2$','L-PC$_3$'],
 			file_name='LS-term_variation.pdf')
@@ -1050,35 +1074,38 @@ for k_max in (np.arange(16)+5):
 	#---------------------------#
 	# Multiple Regression Model 
 	#---------------------------#
-	if 0: # temporarily skip
-		# Model 1 #
-		feature_matrix = my_pca_score[:,0:3] #(567,3)
-		y_hat1, w_std_all, w_rms1, score1, df1 = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
+
+	# Model 1 #
+	feature_matrix = my_pca_score[:,0:3] #(567,3)
+	scores_test_mean, scores_train_mean, scores_test_std_mean, scores_train_std_mean, alpna_n = lasso_lambda(X=feature_matrix, Y=rv_daily, Weight=1/erv_daily**2, alphas=np.logspace(-3, -0, 100), n_folds=5, N=11, title='Model 1', file_name='CV_score1')
+	y_hat1, w_std_all, w_rms1, score1, df1 = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, alpha=0.05, lag='False')
 
 	# Model 2 #
 	feature_matrix = np.vstack([short_variation, long_variation]).T #(567,6)
-	y_hat2, w_std_all, w_rms2, score2, df2 = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
+	scores_test_mean, scores_train_mean, scores_test_std_mean, scores_train_std_mean, alpna_n = lasso_lambda(X=feature_matrix, Y=rv_daily, Weight=1/erv_daily**2, alphas=np.logspace(-3, -0.7, 100), n_folds=5, N=11, title='Model 2', file_name='CV_score2')
+	y_hat2, w_std_all, w_rms2, score2, df2 = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, alpha=0.05, lag='False')
 
-	if 0: # temporarily skip
-		# Model 4 #
-		fwhm_bis 	= np.vstack((fwhm_daily, bis_daily)).T
-		from sklearn.preprocessing import StandardScaler
-		scaler 		= StandardScaler()
-		fwhm_bis 	= scaler.fit_transform(fwhm_bis)
-		efwhm_bis 	= np.vstack((efwhm_daily/np.std(fwhm_daily), ebis_daily/np.std(bis_daily))).T
-		y_hat4, w_std_all, w_rms4, score4, df4 = mlr(fwhm_bis, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
+	# Model 4 #
+	fwhm_bis 	= np.vstack((fwhm_daily, bis_daily)).T
+	from sklearn.preprocessing import StandardScaler
+	scaler 		= StandardScaler()
+	fwhm_bis 	= scaler.fit_transform(fwhm_bis)
+	efwhm_bis 	= np.vstack((efwhm_daily/np.std(fwhm_daily), ebis_daily/np.std(bis_daily))).T
+	scores_test_mean, scores_train_mean, scores_test_std_mean, scores_train_std_mean, alpna_n = lasso_lambda(X=fwhm_bis, Y=rv_daily, Weight=1/erv_daily**2, alphas=np.logspace(-4, -0, 100), n_folds=5, N=11, title='Model 4', file_name='CV_score4')
+	y_hat4, w_std_all, w_rms4, score4, df4 = mlr(fwhm_bis, target_vector=rv_daily, etarget_vector=erv_daily, alpha=0.05, lag='False')
 
-		# Model 5 #
-		k_feature 		= fwhm_bis.shape[1]
-		short_variation = np.zeros((k_feature, fwhm_bis.shape[0]))
-		long_variation 	= np.zeros((k_feature, fwhm_bis.shape[0]))
+	# Model 5 #
+	k_feature 		= fwhm_bis.shape[1]
+	short_variation = np.zeros((k_feature, fwhm_bis.shape[0]))
+	long_variation 	= np.zeros((k_feature, fwhm_bis.shape[0]))
 
-		for i in range(k_feature):
-			_, short_variation[i,:], long_variation[i,:] = long_short_divide(
-				x=bjd_daily, y=fwhm_bis[:,i], yerr=efwhm_bis[:,i], r=100)
+	for i in range(k_feature):
+		_, short_variation[i,:], long_variation[i,:] = long_short_divide(
+			x=bjd_daily, y=fwhm_bis[:,i], yerr=efwhm_bis[:,i], r=100)
 
-		feature_matrix = np.vstack([short_variation, long_variation]).T #(567,4)
-		y_hat5, w_std_all, w_rms5, score5, df5 = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, lag='False')
+	feature_matrix = np.vstack([short_variation, long_variation]).T #(567,4)
+	scores_test_mean, scores_train_mean, scores_test_std_mean, scores_train_std_mean, alpna_n = lasso_lambda(X=feature_matrix, Y=rv_daily, Weight=1/erv_daily**2, alphas=np.logspace(-4, 0, 100), n_folds=5, N=11, title='Model 5', file_name='CV_score5')
+	y_hat5, w_std_all, w_rms5, score5, df5 = mlr(feature_matrix, target_vector=rv_daily, etarget_vector=erv_daily, alpha=0.05, lag='False')
 
 	#----------------
 	if 0: # visually check how the daily binned observation hours are distributed 
@@ -1130,8 +1157,6 @@ for k_max in (np.arange(16)+5):
 	
 	feature_matrix_int_lag[:,k_feature*(2*day+1):] = feature_matrix[index, k_feature:]
 
-	# y_hat3, w_std_all3, res_wrms, score, variance_matrix3 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
-	# imshow_matrix(variance_matrix3, file_name='fiesta_multi_coef') # working :) 
 
 	if 0: # determine np.median(alpna_n) = 0.019 (lambda)
 
@@ -1147,7 +1172,7 @@ for k_max in (np.arange(16)+5):
 			sw 		= 1/erv_daily[index][idx_random]**2
 
 			lasso = Lasso()
-			alphas = np.logspace(-3, -1, 100)
+			alphas = np.logspace(-2, -1.5, 100)
 
 			tuned_parameters = [{"alpha": alphas}]
 
@@ -1158,6 +1183,7 @@ for k_max in (np.arange(16)+5):
 
 		import scipy
 		_, bins, _ = plt.hist(alpna_n, 30, density=1, alpha=0.5)
+		# _, bins, _ = plt.hist(alpna_n, alpha=0.5)
 		mu, sigma = scipy.stats.norm.fit(alpna_n)
 		best_fit_line = scipy.stats.norm.pdf(bins, mu, sigma)
 		plt.plot(bins, best_fit_line)
@@ -1170,156 +1196,102 @@ for k_max in (np.arange(16)+5):
 		#----------------------------------------
 
 
+	if 0:
+		from sklearn.linear_model import Lasso
+		from sklearn.model_selection import train_test_split
+		from sklearn.utils import shuffle
+		from sklearn.model_selection import GridSearchCV
 
-	from sklearn.linear_model import Lasso
-	from sklearn.model_selection import train_test_split
-	from sklearn.utils import shuffle
-	from sklearn.model_selection import GridSearchCV
+		size 		= feature_matrix_int_lag.shape[0]
+		N_folds 	= 5
+		N 			= 1000
+		coef 		= np.zeros((36,N))
+		alphas 		= np.logspace(-4, -1, 100)
 
-	size 		= feature_matrix_int_lag.shape[0]
-	N_folds 	= 5
-	N 			= 1000
-	coef 		= np.zeros((36,N))
-	alphas 		= np.logspace(-4, -1, 100)
-
-	clf_wrms 	= np.zeros(N_folds)
-	CLF_WRMS 	= np.zeros(N)
-	δCLF_WRMS 	= np.zeros(N)
-	CLF_aWRMS 	= np.zeros(len(alphas))
-	δCLF_aWRMS 	= np.zeros(len(alphas))
-	
-	clf_wrms_train 	= np.zeros(N_folds)
-	CLF_WRMS_train 	= np.zeros(N)
-	δCLF_WRMS_train 	= np.zeros(N)
-	CLF_aWRMS_train 	= np.zeros(len(alphas))
-	δCLF_aWRMS_train 	= np.zeros(len(alphas))
-
-	coef_median = np.zeros((36,len(alphas)))
-	count 		= np.zeros(len(alphas))
-
-	for n_alpha in range(len(alphas)):
-		alpha = alphas[n_alpha]
-
-		for n in range(N):
-
-			for nf in range(N_folds): 
-				idx_random = shuffle(np.arange(size))
-				X 		= feature_matrix_int_lag
-				y 		= rv_daily[index]
-				sw 		= 1/erv_daily[index]
-
-				X_train, X_test, y_train, y_test, sw_train, sw_test = train_test_split(X, y, sw, test_size=1/N_folds, shuffle=True)
-
-				clf = Lasso(alpha=alpha)
-				clf.fit(X_train, y_train, sample_weight=sw_train)
-				y_hat = clf.predict(X_test)
-				y_hat_train = clf.predict(X_train)
-
-				_, clf_wrms[nf] = weighted_avg_and_std(y_hat-y_test, weights=sw_test)
-				_, clf_wrms_train[nf] = weighted_avg_and_std(y_hat_train-y_train, weights=sw_train)
-				coef[:,n] = clf.coef_ 
+		clf_wrms 	= np.zeros(N_folds)
+		CLF_WRMS 	= np.zeros(N)
+		δCLF_WRMS 	= np.zeros(N)
+		CLF_aWRMS 	= np.zeros(len(alphas))
+		δCLF_aWRMS 	= np.zeros(len(alphas))
 		
-			CLF_WRMS[n] 	= np.mean(clf_wrms)
-			δCLF_WRMS[n] 	= np.std(clf_wrms) / np.sqrt(N_folds)
-			CLF_WRMS_train[n] 	= np.mean(clf_wrms_train)
-			δCLF_WRMS_train[n] 	= np.std(clf_wrms_train) / np.sqrt(N_folds)
+		clf_wrms_train 	= np.zeros(N_folds)
+		CLF_WRMS_train 	= np.zeros(N)
+		δCLF_WRMS_train 	= np.zeros(N)
+		CLF_aWRMS_train 	= np.zeros(len(alphas))
+		δCLF_aWRMS_train 	= np.zeros(len(alphas))
 
-		CLF_aWRMS[n_alpha] 	= np.mean(CLF_WRMS)
-		δCLF_aWRMS[n_alpha] = np.std(CLF_WRMS)
-		CLF_aWRMS_train[n_alpha] 	= np.mean(CLF_WRMS_train)
-		δCLF_aWRMS_train[n_alpha] = np.std(CLF_WRMS_train)
+		coef_median = np.zeros((36,len(alphas)))
+		count 		= np.zeros(len(alphas))
 
-		coef_median[:,n_alpha] = np.median(coef,axis=1)
-		count[n_alpha] = sum(coef_median[:,n_alpha] != 0)
+		for n_alpha in range(len(alphas)):
+			alpha = alphas[n_alpha]
 
-	plt.figure().set_size_inches(8, 6)
-	plt.axvline(np.median(alpna_n), color='k')
-	plt.rcParams['font.size'] = '16'
-	# plt.title(r'$n_{fold} = $' + str(N_folds))
-	plt.xlabel(r"$\lambda$")
-	plt.ylabel("Residual WRMS [m/s]")
-	plt.xscale('log')
-	plt.plot(alphas, CLF_aWRMS, "r--", label='testing')
-	plt.fill_between(alphas, CLF_aWRMS+δCLF_aWRMS, CLF_aWRMS-δCLF_aWRMS, alpha=0.2, color='r')
-	plt.plot(alphas, CLF_aWRMS_train, "b--", label='training')
-	plt.fill_between(alphas, CLF_aWRMS_train+δCLF_aWRMS_train, CLF_aWRMS_train-δCLF_aWRMS_train, alpha=0.2, color='b')
-	# plt.savefig('CLF_CLF_aWRMS_test_train.png')
-	plt.legend()
-	plt.show()
+			for n in range(N):
 
-	plt.figure().set_size_inches(8, 6)
-	plt.semilogx(alphas, count/max(count), lw=5, alpha=0.3)
-	for i in range(len(count)):
-		plt.text(alphas[i], count[i]/max(count), str(int(count[i])))
-	plt.axvline(np.median(alpna_n))
-	plt.xscale('log')
-	plt.rcParams['font.size'] = '16'
-	# plt.title(r'$n_{fold} = $' + str(N_folds))
-	plt.xlabel(r"$\lambda$")
-	plt.semilogx(alphas, coef_median.T)
-	# plt.savefig('coeff_path_.png')
-	plt.show()
+				for nf in range(N_folds): 
+					idx_random = shuffle(np.arange(size))
+					X 		= feature_matrix_int_lag
+					y 		= rv_daily[index]
+					sw 		= 1/erv_daily[index]
 
+					X_train, X_test, y_train, y_test, sw_train, sw_test = train_test_split(X, y, sw, test_size=1/N_folds, shuffle=True)
 
+					clf = Lasso(alpha=alpha)
+					clf.fit(X_train, y_train, sample_weight=sw_train)
+					y_hat = clf.predict(X_test)
+					y_hat_train = clf.predict(X_train)
 
+					_, clf_wrms[nf] = weighted_avg_and_std(y_hat-y_test, weights=sw_test)
+					_, clf_wrms_train[nf] = weighted_avg_and_std(y_hat_train-y_train, weights=sw_train)
+					coef[:,n] = clf.coef_ 
+			
+				CLF_WRMS[n] 	= np.mean(clf_wrms)
+				δCLF_WRMS[n] 	= np.std(clf_wrms) / np.sqrt(N_folds)
+				CLF_WRMS_train[n] 	= np.mean(clf_wrms_train)
+				δCLF_WRMS_train[n] 	= np.std(clf_wrms_train) / np.sqrt(N_folds)
 
+			CLF_aWRMS[n_alpha] 	= np.mean(CLF_WRMS)
+			δCLF_aWRMS[n_alpha] = np.std(CLF_WRMS)
+			CLF_aWRMS_train[n_alpha] 	= np.mean(CLF_WRMS_train)
+			δCLF_aWRMS_train[n_alpha] = np.std(CLF_WRMS_train)
 
+			coef_median[:,n_alpha] = np.median(coef,axis=1)
+			count[n_alpha] = sum(coef_median[:,n_alpha] != 0)
 
-
-	from sklearn.linear_model import LassoCV
-	from sklearn.linear_model import Lasso
-	from sklearn.model_selection import KFold
-	from sklearn.model_selection import GridSearchCV
-	
-
-	# for n_folds in np.arange(1)+5:
-	# for n_folds in np.arange(10)+5:
-		# print(n_folds)
-		n_folds = 5
-		size 	= feature_matrix_int_lag.shape[0]
-		idx_random = shuffle(np.arange(size))
-		X 		= feature_matrix_int_lag[idx_random,:]
-		y 		= rv_daily[index][idx_random]
-		sw 		= 1/erv_daily[index][idx_random]**2
-
-		lasso = Lasso(random_state=0, max_iter=10000)
-		alphas = np.logspace(-3, -1, 100)
-
-		tuned_parameters = [{"alpha": alphas}]
-
-		clf = GridSearchCV(lasso, tuned_parameters, cv=n_folds, scoring='neg_root_mean_squared_error', refit=True, return_train_score=True)
-		clf.fit(X, y, sample_weight=sw)
-		scores = -clf.cv_results_["mean_test_score"]
-		scores2 = -clf.cv_results_["mean_train_score"]
-		scores_std = clf.cv_results_["std_test_score"]
-		scores_std2 = clf.cv_results_["std_train_score"]
 		plt.figure().set_size_inches(8, 6)
+		plt.axvline(np.median(alpna_n), color='k')
 		plt.rcParams['font.size'] = '16'
-		plt.title(r'$n_{fold} = $' + str(n_folds))
-		plt.semilogx(alphas, scores, label='testing')
-		plt.semilogx(alphas, scores2, label='training')
-
-		# plot error lines showing +/- std. errors of the scores
-		std_error = scores_std / np.sqrt(n_folds)
-		std_error2 = scores_std2 / np.sqrt(n_folds)
-
-		plt.semilogx(alphas, scores + std_error, "b--")
-		plt.semilogx(alphas, scores - std_error, "b--")
-		plt.semilogx(alphas, scores2 + std_error2, "b--")
-		plt.semilogx(alphas, scores2 - std_error2, "b--")	
-
-		# alpha=0.2 controls the translucency of the fill color
-		plt.fill_between(alphas, scores + std_error, scores - std_error, alpha=0.2)
-		plt.fill_between(alphas, scores2 + std_error2, scores2 - std_error2, alpha=0.2)
-		xx=clf.best_estimator_.alpha
-		plt.axvline(xx)
-		plt.text(xx, scores[alphas==xx], '{:.3f}'.format(xx))
-
-		plt.ylabel("CV score +/- std error")
+		# plt.title(r'$n_{fold} = $' + str(N_folds))
 		plt.xlabel(r"$\lambda$")
-		plt.axhline(np.min(scores), linestyle="--", color=".5")
-		plt.xlim([alphas[0], alphas[-1]])
+		plt.ylabel("Residual WRMS [m/s]")
+		plt.xscale('log')
+		plt.plot(alphas, CLF_aWRMS, "r--", label='testing')
+		plt.fill_between(alphas, CLF_aWRMS+δCLF_aWRMS, CLF_aWRMS-δCLF_aWRMS, alpha=0.2, color='r')
+		plt.plot(alphas, CLF_aWRMS_train, "b--", label='training')
+		plt.fill_between(alphas, CLF_aWRMS_train+δCLF_aWRMS_train, CLF_aWRMS_train-δCLF_aWRMS_train, alpha=0.2, color='b')
+		# plt.savefig('CLF_CLF_aWRMS_test_train.png')
 		plt.legend()
+		plt.show()
+
+		plt.figure().set_size_inches(8, 6)
+		plt.semilogx(alphas, count/max(count), lw=5, alpha=0.3)
+		for i in range(len(count)):
+			plt.text(alphas[i], count[i]/max(count), str(int(count[i])))
+		plt.axvline(np.median(alpna_n))
+		plt.xscale('log')
+		plt.rcParams['font.size'] = '16'
+		# plt.title(r'$n_{fold} = $' + str(N_folds))
+		plt.xlabel(r"$\lambda$")
+		plt.semilogx(alphas, coef_median.T)
+		# plt.savefig('coeff_path_.png')
+		plt.show()
+
+
+
+	scores_test_mean, scores_train_mean, scores_test_std_mean, scores_train_std_mean, alpna_n = lasso_lambda(X=feature_matrix_int_lag, Y=rv_daily[index], Weight=1/erv_daily[index]**2, alphas=np.logspace(-3, -0.7, 100), n_folds=5, N=101, title='Model 3', file_name='CV_score3_'+str(k_max))
+	y_hat3, w_std_all3, res_wrms, score, variance_matrix3 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index], alpha=0.05)
+	imshow_matrix(variance_matrix3, score, res_wrms, alpha=0.05, k_max=k_max, file_name='fiesta_multi_coef') # working :) 
+
 
 		if 0:
 			lasso_cv = LassoCV(alphas=alphas, random_state=0, max_iter=10000, fit_intercept=True)
@@ -1333,73 +1305,6 @@ for k_max in (np.arange(16)+5):
 			            k, lasso_cv.alpha_, lasso_cv.score(X[test], y[test])
 			        )
 			    )
-
-		plt.savefig('n_fold=' + str(n_folds) + '.png')
-		# plt.close()
-		plt.show()
-
-# linspace 
-		n_folds = 5
-		size 	= feature_matrix_int_lag.shape[0]
-		idx_random = shuffle(np.arange(size))
-		X 		= feature_matrix_int_lag[idx_random,:]
-		y 		= rv_daily[index][idx_random]
-		sw 		= 1/erv_daily[index][idx_random]**2
-
-		lasso = Lasso(random_state=0, max_iter=10000)
-		alphas = np.linspace(0.01, 0.05, 50)
-		
-
-		tuned_parameters = [{"alpha": alphas}]
-
-		clf = GridSearchCV(lasso, tuned_parameters, cv=n_folds, refit=True, return_train_score=True)
-		clf.fit(X, y, sample_weight=sw)
-
-		scores = clf.cv_results_["mean_test_score"]
-		scores2 = clf.cv_results_["mean_train_score"]
-		scores_std = clf.cv_results_["std_test_score"]
-		scores_std2 = clf.cv_results_["std_train_score"]
-		
-		plt.figure().set_size_inches(8, 6)
-		plt.rcParams['font.size'] = '16'
-		plt.title(r'$n_{fold} = $' + str(n_folds))
-		plt.plot(alphas, scores, label='testing')
-		plt.plot(alphas, scores2, label='training')
-
-		# plot error lines showing +/- std. errors of the scores
-		std_error = scores_std / np.sqrt(n_folds)
-		std_error2 = scores_std2 / np.sqrt(n_folds)
-
-		plt.plot(alphas, scores + std_error, "b--")
-		plt.plot(alphas, scores - std_error, "b--")
-		plt.plot(alphas, scores2 + std_error2, "b--")
-		plt.plot(alphas, scores2 - std_error2, "b--")	
-
-		# alpha=0.2 controls the translucency of the fill color
-		plt.fill_between(alphas, scores + std_error, scores - std_error, alpha=0.2)
-		plt.fill_between(alphas, scores2 + std_error2, scores2 - std_error2, alpha=0.2)
-		xx=clf.best_estimator_.alpha
-		plt.axvline(xx)
-		plt.text(xx, scores[alphas==xx], '{:.3f}'.format(xx))
-
-		plt.ylabel("CV score +/- std error")
-		plt.xlabel(r"$\lambda$")
-		plt.axhline(np.max(scores), linestyle="--", color=".5")
-		plt.xlim([alphas[0], alphas[-1]])
-		plt.legend()
-		plt.savefig('n_fold=' + str(n_folds) + '.png')
-		plt.show()
-		# plt.close()
-		
-
-
-
-
-		
-		
-		
-
-
 
 	#----------------------------------------		
 	N = 1
@@ -1514,8 +1419,9 @@ plt.show()
 	# ---
 
 
-	y_hat6, w_std_all6, res_wrms, score, variance_matrix6 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index])
-	imshow_matrix(variance_matrix6, file_name='fwhm_bis_multi_coef') 
+	scores_test_mean, scores_train_mean, scores_test_std_mean, scores_train_std_mean, alpna_n = lasso_lambda(X=feature_matrix_int_lag, Y=rv_daily[index], Weight=1/erv_daily[index]**2, alphas=np.logspace(-3, -0.7, 100), n_folds=5, N=101, title='Model 6', file_name='CV_score6')
+	y_hat6, w_std_all6, res_wrms, score, variance_matrix6 = mlr(feature_matrix_int_lag, target_vector=rv_daily[index], etarget_vector=erv_daily[index], feature_matrix2=feature_matrix[index], alpha=0.05)
+	imshow_matrix(variance_matrix6, score, res_wrms, alpha=0.05, k_max=k_max, file_name='fwhm_bis_multi_coef') 
 
 	if 0: # test 
 		for i in range(11):

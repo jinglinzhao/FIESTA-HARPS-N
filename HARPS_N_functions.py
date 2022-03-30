@@ -13,7 +13,101 @@ import copy
 #------------------------------------------------------#
 #------------------------------------------------------#
 
-def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind_yalbel, file_name, HARPS=True):
+
+def lasso_lambda(X, Y, Weight, alphas, n_folds=5, N=100, title='', file_name=None):
+
+	from sklearn.linear_model import Lasso
+	from sklearn.model_selection import GridSearchCV
+	from sklearn.utils import shuffle
+	from datetime import datetime
+	from alive_progress import alive_bar
+
+	start_time  = datetime.now()
+
+	alpha_size 	= len(alphas)
+	array_size 	= len(Y)
+
+	alpna_n 		= np.zeros(N)
+	# coef 			= np.zeros((36,N))
+	scores_test 	= np.zeros((alpha_size, N))
+	scores_train 	= np.zeros((alpha_size, N))
+	scores_test_std = np.zeros((alpha_size, N))
+	scores_train_std= np.zeros((alpha_size, N))
+
+	tuned_parameters 	= [{"alpha": alphas}]
+
+	with alive_bar(N) as bar:
+
+		for n in range(N):
+			idx_random 	= shuffle(np.arange(array_size))
+			X 			= X[idx_random,:]
+			Y 			= Y[idx_random]
+			sw 			= Weight[idx_random]
+
+			lasso 		= Lasso()
+			clf 		= GridSearchCV(lasso, tuned_parameters, cv=n_folds, scoring='neg_root_mean_squared_error', refit=True, return_train_score=True)
+			clf.fit(X, Y, sample_weight=sw)
+			# coef[:,n] 	= clf.best_estimator_.coef_
+			alpna_n[n] 	= clf.best_estimator_.alpha
+
+			scores_test[:,n] 		= -clf.cv_results_["mean_test_score"]
+			scores_train[:,n] 		= -clf.cv_results_["mean_train_score"]
+			scores_test_std[:,n]	= clf.cv_results_["std_test_score"] / np.sqrt(n_folds)
+			scores_train_std[:,n] 	= clf.cv_results_["std_train_score"] / np.sqrt(n_folds)
+
+			bar()
+
+	scores_test_mean 		= np.mean(scores_test, axis=1)
+	scores_train_mean 		= np.mean(scores_train, axis=1)
+	scores_test_std_mean 	= np.mean(scores_test_std, axis=1)
+	scores_train_std_mean 	= np.mean(scores_train_std, axis=1)
+
+	end_time = datetime.now()
+	print('Duration: {}'.format(end_time - start_time))
+
+	# plots
+	if file_name != None:
+		plt.figure().set_size_inches(8, 6)
+		plt.rcParams['font.size'] = '16'
+		plt.gcf().subplots_adjust(left=0.15)
+
+		# plot error lines showing +/- std. errors of the scores
+		plt.title(title)
+		plt.semilogx(alphas, scores_test_mean, 'r', label='testing')
+		plt.semilogx(alphas, scores_train_mean, 'b', label='training')
+		plt.semilogx(alphas, scores_test_mean + scores_test_std_mean, "r--")
+		plt.semilogx(alphas, scores_test_mean - scores_test_std_mean, "r--")
+		plt.semilogx(alphas, scores_train_mean + scores_train_std_mean, "b--")
+		plt.semilogx(alphas, scores_train_mean - scores_train_std_mean, "b--")	
+		plt.fill_between(alphas, scores_test_mean + scores_test_std_mean, scores_test_mean - scores_test_std_mean, color='r', alpha=0.2)
+		plt.fill_between(alphas, scores_train_mean + scores_train_std_mean, scores_train_mean - scores_train_std_mean, color='b', alpha=0.2)
+		
+		xx 	= np.median(alpna_n)
+		plt.axvline(xx, color='k', alpha=0.5)
+		plt.text(xx, scores_test_mean[alphas==xx], r'$\hat\lambda_1$ = {:.3f}'.format(xx))
+
+		# determine a more robust lambda using the 1-sigma rule
+		scores_1sigma = (scores_test_mean+scores_test_std_mean)[alphas==xx][0]
+		for i in range(alpha_size-1):
+			if (scores_test_mean[i] < scores_1sigma) & (scores_test_mean[i+1] > scores_1sigma):
+				alpha_1sigma = alphas[i]
+		plt.axvline(alpha_1sigma, color='k', alpha=0.5)			
+		plt.axhline(scores_1sigma, linestyle="--", color=".5")
+		plt.text(alpha_1sigma, scores_1sigma, r'$\hat\lambda_2$ = {:.3f}'.format(alpha_1sigma))
+		plt.ylabel("Residual WRMS [m/s]")
+		plt.xlabel(r"$\lambda$")
+		plt.axhline(np.min(scores_test_mean), linestyle="--", color=".5")
+		plt.xlim([alphas[0], alphas[-1]])
+		plt.legend()
+		
+		plt.savefig(file_name + '.pdf')
+		plt.close()
+	
+	return scores_test_mean, scores_train_mean, scores_test_std_mean, scores_train_std_mean, alpna_n
+
+
+
+def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind_yalbel, file_name, height_ratio=0.7, vlines=[], HARPS=False):
 
 	'''
 	e.g. 
@@ -31,7 +125,7 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 
 	'''
 
-	def new_periodogram(x, y, dy, height_ratio=0.4, plot_min_t=2, max_f=1, spp=100):
+	def new_periodogram(x, y, dy, vlines, height_ratio=height_ratio, plot_min_t=2, max_f=1, spp=100):
 	
 		from scipy.signal import find_peaks
 		from astropy.timeseries import LombScargle
@@ -54,13 +148,12 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 			ax.text(plot_x[idxx][peaks][n], power[idxx][peaks][n], '%.1f' % plot_x[idxx][peaks][n], fontsize=10)
 
 		ax.set_xlim([plot_min_t,time_span/2])
-		ax.set_ylim([0, 1.2*max(power[idxx])])
+		ax.set_ylim([0, 1.25*max(power[idxx])])
 
 		if HARPS == True:
-			dt = 1
-			ax.axvspan(28-dt, 28+dt, alpha=0.2, color='red')
-			ax.axvspan(210-10, 210+10, alpha=0.2, color='red')
-			ax.axvspan(285-10, 285+10, alpha=0.2, color='red')
+			for xc in vlines:
+				ax.axvline(x=xc, color='r', linestyle='-', lw=2, alpha=0.2)
+			ax.axvspan(200, 220, facecolor='r', alpha=0.2)
 
 		ax.set_xscale('log')
 
@@ -90,7 +183,7 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 					ax.errorbar(t, ind[r-1,:], eind[r-1,:],  marker='.', ms=5, color='black', ls='none', alpha=alpha1)
 					ax.set_ylabel(ind_yalbel + '$_{' + str(r) + '}$')
 				if r!=k_mode:
-					ax.set_xticks([])
+					ax.tick_params(labelbottom=False)
 				else:
 					ax.set_xlabel(ts_xlabel)
 
@@ -110,22 +203,23 @@ def plot_all(k_mode, t, rv, erv, ind, eind, ts_xlabel, rv_xlabel, pe_xlabel, ind
 					ax.set_title(title + ' = {:.2f}'.format(adjust_R2))
 					ax.plot(rv-np.mean(rv), ind[r-1,:], 'k.', alpha = alpha2)
 				if r!=k_mode:
-					ax.set_xticks([])
+					ax.tick_params(labelbottom=False)
 				else:
 					ax.set_xlabel(rv_xlabel)
 				ax.yaxis.tick_right()
 
 			if c==2:
 				if r==0:
-					new_periodogram(t, rv, erv)
+					new_periodogram(t, rv, erv, vlines)
 					ax.set_title('Periodogram')
 				if r>0:
-					new_periodogram(t, ind[r-1,:], eind[r-1,:])
+					new_periodogram(t, ind[r-1,:], eind[r-1,:], vlines)
 				if r!=k_mode:
-					ax.set_xticks([])
+					ax.tick_params(labelbottom=False)
 				if r==k_mode:
 					ax.set_xlabel(pe_xlabel)
 
+	fig6.align_ylabels(f6_axes[:, 0])
 	plt.savefig(file_name)
 	plt.close('all')
 
@@ -161,7 +255,7 @@ def plot_all_but_corr(k_mode, t, ind, eind, height_ratio, ts_xlabel, pe_xlabel, 
 		plot_x = 1/frequency
 		idxx = (plot_x>plot_min_t) & (plot_x<time_span/2)
 		height = max(power[idxx])*height_ratio
-		ax.plot(plot_x[idxx], power[idxx], 'k-', label=r'$\xi$'+str(i+1), alpha=0.5)
+		ax.plot(plot_x[idxx], power[idxx], 'k-', alpha=0.5)
 		peaks, _ = find_peaks(power[idxx], height=height)
 		ax.plot(plot_x[idxx][peaks], power[idxx][peaks], "ro")
 
@@ -211,6 +305,7 @@ def plot_all_but_corr(k_mode, t, ind, eind, height_ratio, ts_xlabel, pe_xlabel, 
 				if r==(k_mode-1):
 					ax.set_xlabel(pe_xlabel)
 
+	fig6.align_ylabels(f6_axes[:, 0])
 	plt.savefig(file_name)
 	plt.close('all')
 
@@ -328,7 +423,7 @@ def weighted_avg_and_std(values, weights):
 #------------------------------------------------------#
 #------------------------------------------------------#
 
-def imshow_matrix(coeff_array, file_name):
+def imshow_matrix(coeff_array, score, res_wrms, alpha, k_max, file_name):
 
 	from matplotlib import colors
 
@@ -337,15 +432,16 @@ def imshow_matrix(coeff_array, file_name):
 		file_name = fwhm_bis_multi_coef
 		file_name = pca_coef
 	'''
+
 	day = int((coeff_array.shape[0]-1)/2)
 	x = np.arange(day * 2 + 1) - day
 	y = np.arange(coeff_array.shape[1]) + 1
 
 	from mpl_toolkits.axes_grid1 import make_axes_locatable
-	fig = plt.figure(figsize=(len(x)/1.5+1, len(y)/1.5+1), frameon=False)
+	fig = plt.figure(figsize=(len(x)/1.5+2, len(y)/1.5+1), frameon=False)
 	title = r'$\bar{R}$' + r'$^2$'
 	plt.title(title + ' = {:.3f}'.format(score)
-			  + '   wRMS = {:.2f}'.format(res_wrms))
+			  + '   Residual WRMS = {:.2f} m/s'.format(res_wrms))
 	plt.xlabel('Lag [days]')
 	ax = plt.gca()
 
@@ -376,8 +472,8 @@ def imshow_matrix(coeff_array, file_name):
 	divider = make_axes_locatable(ax)
 	cax = divider.append_axes("right", size="5%", pad=0.05)
 
-	plt.colorbar(im2, cax=cax) 
-	plt.savefig(file_name + '_{:.2f}_{:d}_{:d}'.format(0.05, day, k_max) +'.pdf')
+	plt.colorbar(im2, cax=cax, label='Variance percentage') 
+	plt.savefig(file_name + '_{:.2f}_{:d}_{:d}'.format(alpha, day, k_max) +'.pdf')
 
 	plt.close()
 
@@ -458,7 +554,7 @@ def imshow_matrix(coeff_array, file_name):
 
 #------------------------------------------------------#
 #------------------------------------------------------#
-def mlr(feature_matrix, target_vector, etarget_vector, alpha=0.05, lag='True', day=5, feature_matrix2=None):
+def mlr(feature_matrix, target_vector, etarget_vector, alpha, lag='True', day=5, feature_matrix2=None):
 
 	'''
 		Multiple linear regression

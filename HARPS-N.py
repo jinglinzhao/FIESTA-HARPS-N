@@ -26,21 +26,22 @@ df = pd.read_csv('./harpn_sun_release_timeseries_2015-2018.csv')
 bjd 		= np.array(df['date_bjd'])
 rv 			= np.array(df['rv'])
 erv 		= np.array(df['rv_err'])
-plt.errorbar(bjd, rv, erv, marker='.', alpha=0.1)
-plt.show()
 
+if 0: 
+	plt.errorbar(bjd, rv, erv, marker='.', alpha=0.1)
+	plt.show()
 
-time = bjd_daily - [int(bjd_daily[i]+0.5) for i in np.arange(len(bjd_daily))] + 0.5
-len(time[abs((time-np.median(time))*24)<=1]) / len(time) # 92%
-len(time[abs((time-np.median(time))*24)<=2]) / len(time) # 99%
+	time = bjd_daily - [int(bjd_daily[i]+0.5) for i in np.arange(len(bjd_daily))] + 0.5
+	len(time[abs((time-np.median(time))*24)<=1]) / len(time) # 92%
+	len(time[abs((time-np.median(time))*24)<=2]) / len(time) # 99%
 
-time = (bjd-[int(bjd[i]+0.5) for i in np.arange(len(bjd))]+0.5)*24
-plt.hist(time, bins = 30)
-plt.show()
+	time = (bjd-[int(bjd[i]+0.5) for i in np.arange(len(bjd))]+0.5)*24
+	plt.hist(time, bins = 30)
+	plt.show()
 
-idx = np.arange(1000) + 10000
-plt.errorbar(time[idx], rv[idx], erv[idx], marker='.', alpha=0.3)
-plt.show()
+	idx = np.arange(1000) + 10000
+	plt.errorbar(time[idx], rv[idx], erv[idx], marker='.', alpha=0.3)
+	plt.show()
 
 if 0: 
 	file_ccf = sorted(glob.glob('./ccfs/*.fits'))
@@ -864,6 +865,7 @@ std_matrix = np.zeros(15)
 k_max = 7
 k_max = 20
 k_max = 11
+k_max = 9
 for k_max in (np.arange(1)+4):
 	df, shift_spectrum, err_shift_spectrum, power_spectrum, err_power_spectrum, RV_gauss = FIESTA(V_grid, CCF_daily, eCCF_daily, k_max=k_max)
 	# Convertion from km/s to m/s

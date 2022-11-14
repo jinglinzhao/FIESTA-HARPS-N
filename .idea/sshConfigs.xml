@@ -2,7 +2,9 @@
 <project version="4">
   <component name="SshConfigs">
     <configs>
-      <sshConfig authType="PASSWORD" host="datamgr.aci.ics.psu.edu" id="970b9b26-6e9d-425d-8af0-6d58453af929" port="22" nameFormat="DESCRIPTIVE" username="jvz5625" />
+      <sshConfig host="submit-005.aci.ics.psu.edu" id="cef14226-40a2-4360-aa5e-90e4189131ad" keyPath="$USER_HOME$/.ssh/id_rsa_roar" port="22" customName="roar" nameFormat="CUSTOM" username="jvz5625" useOpenSSHConfig="true">
+        <option name="customName" value="roar" />
+      </sshConfig>
     </configs>
   </component>
 </project>

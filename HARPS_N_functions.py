@@ -45,7 +45,7 @@ def lasso_lambda(X, Y, Weight, alphas, n_folds=5, N=100, title='', file_name=Non
 			sw 			= Weight[idx_random]
 
 			lasso 		= Lasso()
-			clf 		= GridSearchCV(lasso, tuned_parameters, cv=n_folds, scoring='neg_root_mean_squared_error', refit=True, return_train_score=True)
+			clf 		= GridSearchCV(lasso, tuned_parameters, cv=n_folds, scoring='neg_root_mean_squared_error', n_jobs=-1, return_train_score=True)
 			clf.fit(X, Y, sample_weight=sw)
 			# coef[:,n] 	= clf.best_estimator_.coef_
 			alpna_n[n] 	= clf.best_estimator_.alpha
@@ -312,7 +312,7 @@ def plot_all_but_corr(k_mode, t, ind, eind, height_ratio, ts_xlabel, pe_xlabel, 
 #------------------------------------------------------#
 #------------------------------------------------------#
 
-def my_pca(X, X_err, n_pca=None, nor=False):
+def weighted_pca(X, X_err, n_pca=None, nor=False):
 	'''
 	X.shape 	= (n_samples, n_features)
 	X_err.shape = (n_samples, n_features)
@@ -564,7 +564,7 @@ def mlr(feature_matrix, target_vector, etarget_vector, alpha, lag='True', day=5,
 	from sklearn import linear_model
 	from sklearn.linear_model import Lasso
 	
-	regr 	= linear_model.LinearRegression()
+	# regr 	= linear_model.LinearRegression()
 	lasso 	= Lasso(alpha=alpha, max_iter=10000).fit(feature_matrix, target_vector, sample_weight=1/etarget_vector**2)
 
 	y_hat 			= lasso.predict(feature_matrix)

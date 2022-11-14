@@ -12,17 +12,7 @@ import copy
 import sys
 sys.path.append("../")
 from FIESTA_functions import *
-#--------------------------------------------------------------------
-# functions 
-#--------------------------------------------------------------------
 
-def FT(signal, spacing):
-	n 			= signal.size
-	fourier 	= np.fft.rfft(signal, n)
-	freq 		= np.fft.rfftfreq(n, d=spacing)
-	A 			= np.abs(fourier)
-	phi 		= np.angle(fourier)
-	return [A, phi, freq]
 
 #--------------------------------------------------------------------
 # read data
@@ -59,12 +49,6 @@ for i in range(ft.size):
 # plots 
 #--------------------------------------------------------------------
 
-plt.rcParams.update({'font.size': 12})
-colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
-              '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
-              '#bcbd22', '#17becf']
-
-
 for i in range(6):
 	plt.plot(V_grid, res[i,:], '-', label=str(i))
 	plt.xlabel(r'$v$ [km/s]')
@@ -74,48 +58,38 @@ plt.savefig('Flux_residual.png')
 plt.show()
 
 
-k_max = 6
-
 plt.rcParams.update({'font.size': 14})
-plt.subplots(figsize=(16, 6))
+fig, axs = plt.subplots(k, 3, figsize=(16, 6))
 plt.gcf().subplots_adjust(left=0.1, wspace=0.35)
 
-for i in range(k_max):
-
-    ax = plt.subplot(k_max, 3, 3*i+1)
+k = 6
+for i in range(k):
+    
     if i == 0:
-    	plt.plot(V_grid, (np.mean(CCF))*np.ones(len(V_grid)), 'k-')	
+        axs[i,0].set_title('(a) Basis functions')
+        axs[i,1].set_title('(b) Residual')
+        axs[i,0].plot(V_grid, (np.mean(CCF))*np.ones(len(V_grid)), 'k-')
     else:
-    	plt.plot(V_grid, res[i,:] - res[i-1,:], 'k-')
-    plt.ylabel(r'$k$=%d' %(i))
-    if i == 0:
-        plt.title('(a) Basis functions')
+        axs[i,0].plot(V_grid, res[i,:] - res[i-1,:], 'k-')
+    
+    for j in range(2):
+        if i!=k-1:
+            axs[i,j].set_xticks([])
+        else:
+            axs[i,j].set_xlabel('V grid [km/s]')
+        
+    axs[i,0].set_ylabel(r'$k$=%d' %(i))
+    axs[i,1].plot(V_grid, -res[i,:], 'k-')
 
-    if i!=k_max-1:
-        ax.set_xticks([])
-    else:
-        plt.xlabel('V grid [km/s]')
-
-    ax = plt.subplot(k_max, 3, 3*i+2)
-    plt.plot(V_grid, -res[i,:], 'k-')
-    if i == 0:
-        plt.title('(b) Residual')
-
-    if i!=k_max-1:
-        ax.set_xticks([])
-    else:
-        plt.xlabel('V grid [km/s]')
+fig.align_ylabels(axs[:,0])
 
 def SNR(x):
 	return np.median(1-CCF)/x
-
 inverse = SNR
 
 ax = plt.subplot(1, 3, 3)
-
 for i in range(freq.size-1):
 	ax.plot(i, res_rms[i], 'ko', alpha = 0.6)
-	print(i, res_rms[i])
 ax.set_title('(c) Modelling precision')
 xticks = np.hstack((np.arange(10), np.array([10,12,14,16,18,20])))
 ax.set_xticks(xticks)
@@ -123,19 +97,15 @@ ax.set_xlabel(r'$k$')
 ax.set_yscale('log')
 ax.set_ylabel('Residual RMS')
 ax.grid(b=True, which='both')
-secax = ax.secondary_yaxis('right', functions=(SNR, inverse))	
+secax = ax.secondary_yaxis('right', functions=(SNR, inverse))
 secax.set_ylabel('SNR')
-plt.savefig('FIESTA_demo.pdf')
+plt.savefig('Figure/FIESTA_demo.pdf')
 plt.show()
 
 
-Number of Fourier modes used
 # Plot with two axes 
 # https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.secondary_yaxis.html#matplotlib.axes.Axes.secondary_yaxis
 # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/secondary_axis.html
-
-plt.rcParams.update({'font.size': 14})
-fig, ax = plt.subplots(figsize=(10, k_max))
 
 
 
